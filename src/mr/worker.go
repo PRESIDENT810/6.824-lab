@@ -1,10 +1,13 @@
 package mr
 
-import "fmt"
+import (
+	"fmt"
+	"io/ioutil"
+	"os"
+)
 import "log"
 import "net/rpc"
 import "hash/fnv"
-
 
 //
 // Map functions return a slice of KeyValue.
@@ -24,7 +27,6 @@ func ihash(key string) int {
 	return int(h.Sum32() & 0x7fffffff)
 }
 
-
 //
 // main/mrworker.go calls this function.
 //
@@ -32,33 +34,85 @@ func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 
 	// Your worker implementation here.
+	taskType, mapTask, reduceTask, M, R := GetTask()
+	intermediate := []KeyValue{}
 
-	// uncomment to send the Example RPC to the master.
-	// CallExample()
+	if taskType == 0 { // start the map process
+		for _, filename := range mapTask.inputFiles {
+			file, err := os.Open(filename)
+			if err != nil {
+				log.Fatalf("cannot open %v", filename)
+			}
+			content, err := ioutil.ReadAll(file)
+			if err != nil {
+				log.Fatalf("cannot read %v", filename)
+			}
+			file.Close()
+			kva := mapf(filename, string(content))
+			intermediate = append(intermediate, kva...)
+		}
+		// TODO: write intermediate kv pairs into R local files
+
+		_ = MapTaskDone() // tell master I've done the map task
+	} else { // start the reduce process
+		// TODO: read  intermediate kv pairs from M local files
+		i := 0
+		for i < len(intermediate) {
+			j := i + 1
+			for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
+				j++
+			}
+			values := []string{}
+			for k := i; k < j; k++ {
+				values = append(values, intermediate[k].Value)
+			}
+			occurence := reducef(intermediate[i].Key, values)
+
+			// TODO: write result into the output file
+
+			i = j
+		}
+
+		//ofile.Close()
+		_ = ReduceTaskDone() // tell master I've done the reduce task
+	}
 
 }
 
-//
-// example function to show how to make an RPC call to the master.
-//
-// the RPC argument and reply types are defined in rpc.go.
-//
-func CallExample() {
+func MapTaskDone() error {
+	args := DoneArgs{}
+	reply := DoneReply{}
+	args.TaskType = 0
+	call("Master.TaskDone", &args, &reply)
+	return nil
+}
 
-	// declare an argument structure.
-	args := ExampleArgs{}
+func ReduceTaskDone() error {
+	args := DoneArgs{}
+	reply := DoneReply{}
+	args.TaskType = 1
+	call("Master.TaskDone", &args, &reply)
+	return nil
+}
 
-	// fill in the argument(s).
-	args.X = 99
-
-	// declare a reply structure.
-	reply := ExampleReply{}
-
-	// send the RPC request, wait for the reply.
-	call("Master.Example", &args, &reply)
-
-	// reply.Y should be 100.
-	fmt.Printf("reply.Y %v\n", reply.Y)
+func GetTask() (int, MapTask, ReduceTask, int, int) {
+	args := TaskArgs{}
+	reply := TaskReply{}
+	call("Master.GiveMeTask", &args, &reply)
+	mapTask := MapTask{}
+	reduceTask := ReduceTask{}
+	if reply.taskType == -1 { // mapreduce is completed
+		os.Exit(0) // exit with code 0
+	} else if reply.taskType == 0 { // it should be a map task
+		mapTask.ID = reply.id
+		mapTask.state = 0 // initial state is idle...I guess?
+		mapTask.inputFiles = reply.inputFiles
+	} else {
+		reduceTask.ID = reply.id
+		reduceTask.state = 0 // initial state is idle...I guess?
+		reduceTask.inputFiles = reply.inputFiles
+	}
+	return reply.taskType, mapTask, reduceTask, reply.M, reply.R
 }
 
 //

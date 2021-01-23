@@ -7,7 +7,7 @@ package main
 //
 
 import "fmt"
-import "../mr"
+import "mr"
 import "plugin"
 import "os"
 import "log"
@@ -28,7 +28,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	mapf, reducef := loadPlugin(os.Args[1])
+	mapf, reducef := loadPlugin(os.Args[1]) // extract map and reduce function from plugin
 
 	//
 	// read each input file,
@@ -36,7 +36,7 @@ func main() {
 	// accumulate the intermediate Map output.
 	//
 	intermediate := []mr.KeyValue{}
-	for _, filename := range os.Args[2:] {
+	for _, filename := range os.Args[2:] { // generate kv pair for each word in input files with value "1"
 		file, err := os.Open(filename)
 		if err != nil {
 			log.Fatalf("cannot open %v", filename)
@@ -56,10 +56,11 @@ func main() {
 	// rather than being partitioned into NxM buckets.
 	//
 
-	sort.Sort(ByKey(intermediate))
+	sort.Sort(ByKey(intermediate)) // sort by kv pair's key
 
 	oname := "mr-out-0"
-	ofile, _ := os.Create(oname)
+	_ = os.Remove(oname)         // delete old file
+	ofile, _ := os.Create(oname) // create a new file
 
 	//
 	// call Reduce on each distinct key in intermediate[],
@@ -91,6 +92,8 @@ func main() {
 // from a plugin file, e.g. ../mrapps/wc.so
 //
 func loadPlugin(filename string) (func(string, string) []mr.KeyValue, func(string, []string) string) {
+	path, _ := os.Getwd()
+	fmt.Printf("Path: %s\n", path)
 	p, err := plugin.Open(filename)
 	if err != nil {
 		log.Fatalf("cannot load plugin %v", filename)
