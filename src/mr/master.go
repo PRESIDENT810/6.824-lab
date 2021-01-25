@@ -30,19 +30,21 @@ type Master struct {
 //
 func (master *Master) GiveTask(taskArgs *TaskArgs, taskReply *TaskReply) error {
 	fmt.Printf("Worker with pid %d comes to ask for a job!\n", os.Getpid())
+	master.mu.Lock()
 	if master.mapAssigned == master.M && master.mapDone != master.M { // all map tasks assigned but some still running
+		master.mu.Unlock()
 		for {
 			time.Sleep(5 * time.Second) // sleep and wait for a while
 			master.mu.Lock()
-			fmt.Printf("I'm waiting, and I think mapDone is %d, mapAssigned is %d\n", master.mapDone, master.mapAssigned)
+			fmt.Printf("I'm waiting, and I think mapAssigned is %d, mapDone is %d\n", master.mapDone, master.mapAssigned)
 			logMaster(master)
-			if master.mapDone == master.M { // if all map tasks are done, then break
-				master.mu.Unlock()
+			if master.mapAssigned != master.M || master.mapDone == master.M { // if all map tasks are done, then break to assign tasks
 				break
 			}
 			master.mu.Unlock()
 		}
 	}
+	master.mu.Unlock()
 	if master.reduceDone >= master.R {
 		taskReply.TaskType = -1 // mapreduce is done, and workers should quit
 		return nil
