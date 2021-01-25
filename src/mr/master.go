@@ -29,12 +29,18 @@ type Master struct {
 // give a worker a task
 //
 func (master *Master) GiveTask(taskArgs *TaskArgs, taskReply *TaskReply) error {
+	fmt.Printf("Worker with pid %d comes to ask for a job!\n", os.Getpid())
 	if master.mapAssigned == master.M && master.mapDone != master.M { // all map tasks assigned but some still running
 		for {
-			time.Sleep(1000000000)          // sleep and wait for a while
-			if master.mapDone != master.M { // if all map tasks are done, then break
+			time.Sleep(5 * time.Second) // sleep and wait for a while
+			master.mu.Lock()
+			fmt.Printf("I'm waiting, and I think mapDone is %d, mapAssigned is %d\n", master.mapDone, master.mapAssigned)
+			logMaster(master)
+			if master.mapDone == master.M { // if all map tasks are done, then break
+				master.mu.Unlock()
 				break
 			}
+			master.mu.Unlock()
 		}
 	}
 	if master.reduceDone >= master.R {
@@ -48,12 +54,14 @@ func (master *Master) GiveTask(taskArgs *TaskArgs, taskReply *TaskReply) error {
 		taskReply.InputFiles = GiveReduceFiles(taskReply.Id, master.M)
 		taskReply.M = master.M
 		taskReply.R = master.R
+		go master.faultHandler(1, taskReply.Id)
 	} else { // still some map tasks need to be assigned
 		taskReply.TaskType = 0              // give a map task
 		taskReply.Id = master.nextMapTask() // find a idle task and give
 		taskReply.InputFiles = GiveMapFiles(taskReply.Id, master.M)
 		taskReply.M = master.M
 		taskReply.R = master.R
+		go master.faultHandler(0, taskReply.Id)
 	}
 	// TODO: add a timer to check whether this task is done in 10 seconds
 	return nil
@@ -68,13 +76,19 @@ func (master *Master) TaskDone(doneArgs *DoneArgs, doneReply *DoneReply) error {
 	master.mu.Lock()
 	if doneArgs.TaskType == 0 { // a map task is done
 		if master.mapStatus[doneArgs.Id] == 1 { // only update to "completed" for in progress tasks
+			fmt.Printf("Work report map task %d is done\n", doneArgs.Id)
 			master.mapStatus[doneArgs.Id] = 2 // make this map task's status completed
 			master.mapDone++
+		} else {
+			fmt.Printf("Work report a previously reset map task %d is done\n", doneArgs.Id)
 		}
 	} else { // a reduce task is done
 		if master.reduceStatus[doneArgs.Id] == 1 { // only update to "completed" for in progress tasks
+			fmt.Printf("Work report reduce task %d is done\n", doneArgs.Id)
 			master.reduceStatus[doneArgs.Id] = 2 // make this reduce task's status completed
 			master.reduceDone++
+		} else {
+			fmt.Printf("Work report a previously reset reduce task %d is done\n", doneArgs.Id)
 		}
 	}
 	master.mu.Unlock()
@@ -87,9 +101,23 @@ func (master *Master) TaskDone(doneArgs *DoneArgs, doneReply *DoneReply) error {
 // if a task doesn't report done in 10s, then we think this task is fucked,
 // and reset its status to "idle"
 //
-func (master *Master) faultHandler(taskType int, taskId int) error {
-
-	return nil
+func (master *Master) faultHandler(taskType int, taskId int) {
+	time.Sleep(time.Duration(10) * time.Second)
+	master.mu.Lock()
+	if taskType == 0 { // this is a map task
+		if master.mapStatus[taskId] != 2 { // this map task is not done after 10s, so we regard it as fucked
+			fmt.Printf("Map task %d is fucked, reset to idle status\n", taskId)
+			master.mapStatus[taskId] = 0 // reset it to idle status, so it can be assigned to other worker later
+			master.mapAssigned--
+		}
+	} else {
+		if master.reduceStatus[taskId] != 2 { // this map task is not done after 10s, so we regard it as fucked
+			fmt.Printf("Reduce task %d is fucked, reset to idle status\n", taskId)
+			master.reduceStatus[taskId] = 0 // reset it to idle status, so it can be assigned to other worker later
+			master.reduceAssigned--
+		}
+	}
+	master.mu.Unlock()
 }
 
 //
@@ -102,6 +130,7 @@ func (master *Master) nextMapTask() int {
 		if master.mapStatus[i] == 0 { // find an idle map task
 			master.mapStatus[i] = 1 // make it in progress
 			master.mapAssigned++    // one more assigned map task
+			fmt.Printf("Master assigned map task %d\n", i)
 			master.mu.Unlock()
 			return i
 		}
@@ -120,6 +149,7 @@ func (master *Master) nextReduceTask() int {
 		if master.reduceStatus[i] == 0 { // find an idle reduce task
 			master.reduceStatus[i] = 1 // make it in progress
 			master.reduceAssigned++    // one more assigned reduce task
+			fmt.Printf("Master assigned reduce task %d\n", i)
 			master.mu.Unlock()
 			return i
 		}
@@ -132,7 +162,29 @@ func (master *Master) nextReduceTask() int {
 // log how many map and reduce tasks are done
 //
 func logMaster(master *Master) {
-	fmt.Printf("mapDone: %d, reduceDone: %d\n", master.mapDone, master.reduceDone)
+	fmt.Printf("Map task status: (assigned: %d; done: %d)\n", master.mapAssigned, master.mapDone)
+	for i := 0; i < master.M; i++ {
+		switch master.mapStatus[i] {
+		case 0:
+			fmt.Printf("%d, ", 0)
+		case 1:
+			fmt.Printf("%d, ", 1)
+		case 2:
+			fmt.Printf("%d, ", 2)
+		}
+	}
+	fmt.Printf("\nReduce task status: (assigned: %d; done: %d)\n", master.reduceAssigned, master.reduceDone)
+	for i := 0; i < master.R; i++ {
+		switch master.reduceStatus[i] {
+		case 0:
+			fmt.Printf("%d, ", 0)
+		case 1:
+			fmt.Printf("%d, ", 1)
+		case 2:
+			fmt.Printf("%d, ", 2)
+		}
+	}
+	fmt.Printf("\n\n")
 }
 
 //
