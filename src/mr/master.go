@@ -36,7 +36,7 @@ func (master *Master) GiveTask(taskArgs *TaskArgs, taskReply *TaskReply) error {
 		for {
 			time.Sleep(5 * time.Second) // sleep and wait for a while
 			master.mu.Lock()
-			fmt.Printf("I'm waiting, and I think mapAssigned is %d, mapDone is %d\n", master.mapDone, master.mapAssigned)
+			fmt.Printf("I'm waiting, and I think mapAssigned is %d, mapDone is %d\n", master.mapAssigned, master.mapDone)
 			logMaster(master)
 			if master.mapAssigned != master.M || master.mapDone == master.M { // if all map tasks are done, then break to assign tasks
 				break
@@ -44,7 +44,7 @@ func (master *Master) GiveTask(taskArgs *TaskArgs, taskReply *TaskReply) error {
 			master.mu.Unlock()
 		}
 	}
-	master.mu.Unlock()
+
 	if master.reduceDone >= master.R {
 		taskReply.TaskType = -1 // mapreduce is done, and workers should quit
 		return nil
@@ -65,7 +65,7 @@ func (master *Master) GiveTask(taskArgs *TaskArgs, taskReply *TaskReply) error {
 		taskReply.R = master.R
 		go master.faultHandler(0, taskReply.Id)
 	}
-	// TODO: add a timer to check whether this task is done in 10 seconds
+	master.mu.Unlock()
 	return nil
 }
 
@@ -126,18 +126,18 @@ func (master *Master) faultHandler(taskType int, taskId int) {
 // give next map task according to master's map task status
 //
 func (master *Master) nextMapTask() int {
-	master.mu.Lock()
+	//master.mu.Lock()
 	logMaster(master)
 	for i := 0; i < master.M; i++ {
 		if master.mapStatus[i] == 0 { // find an idle map task
 			master.mapStatus[i] = 1 // make it in progress
 			master.mapAssigned++    // one more assigned map task
 			fmt.Printf("Master assigned map task %d\n", i)
-			master.mu.Unlock()
+			//master.mu.Unlock()
 			return i
 		}
 	}
-	master.mu.Unlock()
+	//master.mu.Unlock()
 	panic("No more map task to give!")
 }
 
@@ -145,18 +145,18 @@ func (master *Master) nextMapTask() int {
 // give next reduce task according to master's reduce task status
 //
 func (master *Master) nextReduceTask() int {
-	master.mu.Lock()
+	//master.mu.Lock()
 	logMaster(master)
 	for i := 0; i < master.R; i++ {
 		if master.reduceStatus[i] == 0 { // find an idle reduce task
 			master.reduceStatus[i] = 1 // make it in progress
 			master.reduceAssigned++    // one more assigned reduce task
 			fmt.Printf("Master assigned reduce task %d\n", i)
-			master.mu.Unlock()
+			//master.mu.Unlock()
 			return i
 		}
 	}
-	master.mu.Unlock()
+	//master.mu.Unlock()
 	panic("No more reduce task to give!")
 }
 
