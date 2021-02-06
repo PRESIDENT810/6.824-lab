@@ -133,6 +133,9 @@ func Worker(mapf func(string, string) []KeyValue, reducef func(string, []string)
 	}
 }
 
+//
+// when a map task is done, report to master
+//
 func MapTaskDone(mapTask *MapTask) error {
 	args := DoneArgs{}
 	args.Id = mapTask.ID
@@ -142,6 +145,9 @@ func MapTaskDone(mapTask *MapTask) error {
 	return nil
 }
 
+//
+// when a reduce task is done, report to master
+//
 func ReduceTaskDone(reduceTask *ReduceTask) error {
 	args := DoneArgs{}
 	args.Id = reduceTask.ID
@@ -151,6 +157,9 @@ func ReduceTaskDone(reduceTask *ReduceTask) error {
 	return nil
 }
 
+//
+// ask master for  a map/reduce task
+//
 func GetTask() (int, MapTask, ReduceTask, int, int) {
 	args := TaskArgs{}
 	reply := TaskReply{}
