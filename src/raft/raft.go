@@ -17,7 +17,12 @@ package raft
 //   in the same server.
 //
 
-import "sync"
+import (
+	"math"
+	"math/rand"
+	"sync"
+	"time"
+)
 import "sync/atomic"
 import "labrpc"
 
@@ -41,6 +46,18 @@ type ApplyMsg struct {
 	CommandIndex int
 }
 
+// defined const to identify roles for each server
+const (
+	LEADER    = 0
+	CANDIDATE = 1
+	FOLLOWER  = 2
+)
+
+type Log struct {
+	term    int         // the term for this log entry
+	command interface{} // empty interface for the actual command of this log entry
+}
+
 //
 // A Go object implementing a single Raft peer.
 //
@@ -55,15 +72,33 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
+	// states listed in figure 2
+	currentTerm int   // what I think my current term is, persistent state
+	voteFor     int   // who I vote for in my current term, persistent state
+	logs        []Log // what is my logs, persistent state
+
+	commitIndex int // index of the last committed log, volatile state
+	lastApplied int // index of the last applied log, volatile state
+
+	nextIndex  []int // indices of the next log I should send to each follower, volatile state for leader only
+	matchIndex []int // indices of the last log that matches to each follower, volatile state for leader only
+
+	// extra attributes I might need later
+	role             int       // 0 for LEADER; 1 for CANDIDATE; 2 for FOLLOWER
+	electionLastTime time.Time // timestamp when last time heard from a leader
+	electionExpired  bool      // if true, then last election expired and should run new election
 }
 
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
-
 	var term int
 	var isleader bool
 	// Your code here (2A).
+	rf.mu.Lock()
+	term = rf.currentTerm        // give my current term
+	isleader = rf.role == LEADER // true if I am the LEADER
+	rf.mu.Unlock()
 	return term, isleader
 }
 
@@ -111,6 +146,10 @@ func (rf *Raft) readPersist(data []byte) {
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
+	Term         int // candidate's term
+	CandidateId  int // candidate who is requesting vote
+	LastLogIndex int // index of candidate's last log entry
+	LastLogTerm  int // term of candidate's last log entry
 }
 
 //
@@ -119,6 +158,8 @@ type RequestVoteArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
+	term        int  // currentTerm of the receiver, for the sender to update itself
+	voteGranted bool // true means candidate received vote
 }
 
 //
@@ -218,8 +259,7 @@ func (rf *Raft) killed() bool {
 // Make() must return quickly, so it should start goroutines
 // for any long-running work.
 //
-func Make(peers []*labrpc.ClientEnd, me int,
-	persister *Persister, applyCh chan ApplyMsg) *Raft {
+func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan ApplyMsg) *Raft {
 	rf := &Raft{}
 	rf.peers = peers
 	rf.persister = persister
@@ -227,8 +267,214 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// Your initialization code here (2A, 2B, 2C).
 
+	// persistent state on all servers
+	rf.currentTerm = 0       // initialized to 0 on first boot, increases monotonically
+	rf.voteFor = -1          // initialized to -1 to indicate I vote for no one at beginning
+	rf.logs = make([]Log, 0) // // initialized to my logs to a empty array slice
+
+	// volatile state on all servers
+	rf.commitIndex = 0 // initialized to 0, increases monotonically
+	rf.lastApplied = 0 // initialized to 0, increases monotonically
+
+	// volatile state on leaders (must be reinitialized after election)
+	rf.nextIndex = make([]int, len(peers))  // don't need to initialize now since I'm not a leader on first boot
+	rf.matchIndex = make([]int, len(peers)) // don't need to initialize now since I'm not a leader on first boot
+
+	// initialized extra attributes I added
+	rf.BecomeFollower() // all servers should be followers when starting up
+
+	go rf.SetTimer()    // set a timer to calculate elapsed time for election
+	go rf.SetApplier()  // set a applier to apply logs (send through applyCh)
+	go rf.MainRoutine() // start raft instance's main routine
+
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
 	return rf
+}
+
+//
+// used when a raft instance becomes a leader
+// to become a candidate, raft instance should pause its timer
+// so we reset its electionExpired and electionLastTime
+// we pause the timer by setting the electionLastTime to a the biggest value
+// this function doesn't lock raft instance, so you need to use mutex lock outside the function
+//
+func (rf *Raft) BecomeLeader() {
+	rf.role = LEADER
+	rf.electionExpired = false
+	rf.electionLastTime = time.Unix(math.MaxInt64, 0)
+}
+
+//
+// used when a raft instance becomes a candidate
+// to become a candidate, raft instance should reset its timer
+// so we reset its electionExpired and electionLastTime
+// this function doesn't lock raft instance, so you need to use mutex lock outside the function
+//
+func (rf *Raft) BecomeCandidate() {
+	rf.role = CANDIDATE
+	rf.electionExpired = false
+	rf.electionLastTime = time.Now()
+}
+
+//
+// used when a raft instance becomes a follower
+// to become a follower, raft instance should reset its timer
+// so we reset its electionExpired and electionLastTime
+// this function doesn't lock raft instance, so you need to use mutex lock outside the function
+//
+func (rf *Raft) BecomeFollower() {
+	rf.role = FOLLOWER
+	rf.electionExpired = false
+	rf.electionLastTime = time.Now()
+}
+
+//
+// the main raft routine periodically checks its state
+// if raft is a follower or candidate (not sure about this) with election timeout,
+// then it runs a election trying to become a leader
+// if raft is a leader, then send heartbeats to its followers
+//
+func (rf *Raft) MainRoutine() {
+	for {
+		time.Sleep(10 * time.Millisecond) // sleep a while to save some CPU time
+		if rf.killed() {                  // if the raft instance is killed, it means this test is finished and we should quit
+			return
+		}
+		// TODO: add mutex lock if you want to access raft instance's state!
+		switch rf.role {
+		case LEADER: // if you are a leader, then you should send heartbeats
+			break
+		case CANDIDATE: // if you are a candidate, you should start a election
+			rf.currentTerm++   // increment my current term
+			rf.voteFor = rf.me // vote for myself
+			rf.RunElection()   // send requestVote RPCs to all other servers
+			break
+		case FOLLOWER: // if you are a follower, you should do nothing but wait for RPC from your leader
+			if rf.electionExpired { // but first check election timeout
+				rf.BecomeCandidate() // if it expires, then convert to candidate and proceed
+				continue
+			}
+			break // if no timeout then it is fine, RPC call is handled in its handler so nothing to do here
+		}
+	}
+}
+
+//
+// as a raft instance becomes a candidate, it asks all its peers to vote after it votes for itself
+// it send RPC request for each server in a separate goroutine and handle RPC reply in a same goroutine;
+// according to the result of the election, it decides whether it becomes the leader or convert to follower;
+// since labrpc guarantees that every RPC returns, we don't need to handle RPC timeout, etc.
+// This function quits only when raft is no longer candidate, or due to timeout it needs to re-elect
+//
+func (rf *Raft) RunElection() {
+	rf.mu.Lock()
+	term := rf.currentTerm                    // my term
+	candidateId := rf.me                      // candidate id, which is me!
+	lastLogIndex := len(rf.logs) - 1          // index of my last log entry
+	lastLogTerm := rf.logs[lastLogIndex].term // term of my last log entry
+	rf.mu.Unlock()
+
+	electionDone := sync.NewCond(new(sync.Mutex))
+	upVote := 1   // how many servers agree to vote for me (initialized to 1 since I vote for myself!)
+	downVote := 0 // how many servers disagree to vote for me
+
+	for idx, _ := range rf.peers {
+		if idx == candidateId {
+			continue // I don't have to vote for myself, I did this in my MainRoutine function
+		}
+		args := RequestVoteArgs{term, candidateId, lastLogIndex, lastLogTerm}
+		reply := RequestVoteReply{}
+		go rf.RequestSingleVote(idx, &args, &reply, &upVote, &downVote) // send RPC to each server
+	}
+
+	go func(rf *Raft) { // if I am no longer a candidate or election time expires, then quit this function
+		for { // since ultimately there will be election timeout, so this goroutine eventually quits
+			rf.mu.Lock()                                    // lock raft instance to access its role
+			if rf.role != CANDIDATE || rf.electionExpired { // check if I'm still a candidate and election timeout
+				electionDone.Signal()
+			}
+			rf.mu.Unlock()
+			time.Sleep(15 * time.Millisecond) // sleep a while to save CPU
+		}
+	}(rf)
+
+	electionDone.Wait() // wait for the election checker goroutine above
+}
+
+//
+// send RequestVote RPC to a single server and handle the reply
+// also signal the voteDone cond var
+//
+func (rf *Raft) RequestSingleVote(server int, args *RequestVoteArgs, reply *RequestVoteReply, upVote *int, downVote *int) {
+
+	rf.sendRequestVote(server, args, reply)
+
+	// TODO: do we really have to discard reply with a different term that mismatches args' term?
+
+	rf.mu.Lock()         // add mutex lock before you access attributes of raft instance
+	defer rf.mu.Unlock() // release mutex lock when the function quits
+
+	if rf.role != CANDIDATE { // no need to count the vote since I'm no longer a candidate
+		return
+	}
+
+	if reply.term < rf.currentTerm { // this RPC is too old (a newer term now), just discard it
+		return
+	}
+
+	if reply.term > rf.currentTerm { // someone's term is bigger than me, so I'm not the newest one
+		rf.currentTerm = reply.term // update my current term
+		rf.BecomeFollower()         // convert to follower
+	}
+
+	if reply.voteGranted { // this server agree to vote for me
+		*upVote++
+		if *upVote > len(rf.peers)/2 { // I won majority
+			rf.BecomeLeader() // so I'm a leader now
+		}
+	} else { // this server agree to vote for me
+		*downVote++         // I lost majority
+		rf.BecomeFollower() // so I'm a follower now
+	}
+}
+
+//
+// the applier can be awaken by a cond var; every time there are logs are committed,
+// you should awake the cond var and tell this function to apply logs
+// which is to send log through applyCh, and also increase raft instance's lastApplied value
+//
+func (rf *Raft) SetApplier() {
+	for {
+		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
+			return
+		}
+		// TODO: finish this shit when you do 2(B), I left it alone since it's no use for 2(A)!
+	}
+}
+
+//
+// the timer to calculate time passed since rf.electionLastTime
+// if the time is more than a random threshold between 150ms to 300ms
+// then there is a timeout, and the raft instance should set electionExpired to true
+// to notify itself it should run a new election
+//
+func (rf *Raft) SetTimer() {
+	rand.Seed(time.Now().Unix())    // set a random number seed to ensure it generates different random number
+	timeout := rand.Int()%150 + 150 // generate a random timeout threshold between 150 to 300ms
+	for {
+		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
+			return
+		}
+		time.Sleep(10 * time.Millisecond) // sleep a while to save some CPU time
+		electionCurrentTime := time.Now()
+		rf.mu.Lock()
+		if electionCurrentTime.Unix()-rf.electionLastTime.Unix() > int64(timeout) { // timeout!
+			rf.electionExpired = true                 // election time expired! you should run a new election now
+			rf.electionLastTime = electionCurrentTime // reset the timer
+			timeout = rand.Int()%150 + 150            // reset the random timeout threshold
+		}
+		rf.mu.Unlock()
+	}
 }
