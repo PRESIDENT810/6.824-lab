@@ -94,6 +94,11 @@ func (rf *Raft) PrintLog() {
 		rf.me, rf.currentTerm, rf.voteFor, rf.commitIndex, rf.lastApplied, rf.role, rf.electionExpired)
 }
 
+func (rf *Raft) LogRequestVote(sender, receiver int, args *RequestVoteArgs, reply *RequestVoteReply) {
+	log.Printf("Raft server %d send RequestVote RPC to %d\nArguments:\nterm: %d, candidateId: %d, lastLogIndex: %d, lastLogTerm: %d\nReply:\nterm: %d, voteGranted: %t\n\n\n",
+		sender, receiver, args.Term, args.CandidateId, args.LastLogIndex, args.LastLogTerm, reply.Term, reply.VoteGranted)
+}
+
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
@@ -188,12 +193,13 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		return
 	}
 
-	if rf.voteFor == -1 || rf.voteFor == args.CandidateId { // either I vote for nobody, or I vote for you already
+	if rf.voteFor == -1 || rf.voteFor == args.CandidateId { // either I voted for nobody, or I voted for you already
 		// TODO: check whether candidate's log is AT LEAST as UP-TO_DATE as my log, if so, grant vote
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = true
+		rf.voteFor = args.CandidateId // change my voteFor to the candidate
 		return
-	} else {
+	} else { // I already voted someone else
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = false
 		return
@@ -339,12 +345,12 @@ func (rf *Raft) MainRoutine() {
 			return
 		}
 		rf.mu.Lock()
-		//rf.PrintLog()
+		rf.PrintLog()
 		switch rf.role {
 		case LEADER: // if you are a leader, then you should send heartbeats
 			rf.mu.Unlock() // release the lock now since to send heartBeat we will require the lock again
 			// TODO: send heartbeat via AppendEntries RPC
-			time.Sleep(10 * time.Millisecond) // after sleep a while, you need to send heartbeat again
+			time.Sleep(100 * time.Millisecond) // after sleep a while, you need to send heartbeat again
 			break
 		case CANDIDATE: // if you are a candidate, you should start a election
 			rf.currentTerm++   // increment my current term
@@ -360,7 +366,7 @@ func (rf *Raft) MainRoutine() {
 				continue
 			}
 			rf.mu.Unlock()                    // release the lock now since BecomeCandidate is not thread safe
-			time.Sleep(10 * time.Millisecond) // after sleep a while, and check if my timeout expires again
+			time.Sleep(20 * time.Millisecond) // after sleep a while, and check if my timeout expires again
 			break                             // if no timeout then it is fine, RPC call is handled in its handler so nothing to do here
 		}
 	}
@@ -417,6 +423,7 @@ func (rf *Raft) RunElection() {
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply, upVote *int, downVote *int) {
 
 	rf.peers[server].Call("Raft.RequestVote", args, reply)
+	rf.LogRequestVote(rf.me, server, args, reply)
 
 	// TODO: do we really have to discard reply with a different term that mismatches args' term?
 
@@ -470,7 +477,7 @@ func (rf *Raft) SetApplier() {
 //
 func (rf *Raft) SetTimer() {
 	rand.Seed(int64(rf.me))         // set a random number seed to ensure it generates different random number
-	timeout := rand.Int()%150 + 150 // generate a random timeout threshold between 150 to 300ms
+	timeout := rand.Int()%300 + 150 // generate a random timeout threshold between 150 to 300ms
 	for {
 		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
 			return
