@@ -18,7 +18,7 @@ package raft
 //
 
 import (
-	"math"
+	"log"
 	"math/rand"
 	"sync"
 	"time"
@@ -87,6 +87,11 @@ type Raft struct {
 	role             int       // 0 for LEADER; 1 for CANDIDATE; 2 for FOLLOWER
 	electionLastTime time.Time // timestamp when last time heard from a leader
 	electionExpired  bool      // if true, then last election expired and should run new election
+}
+
+func (rf *Raft) PrintLog() {
+	log.Printf("Raft server %d reports\nCurrentTerm: %d, voteFor: %d, commitIndex: %d, lastApplied: %d, role: %d, electionLastTime: %d, electionExpired: %t\n\n\n",
+		rf.me, rf.currentTerm, rf.voteFor, rf.commitIndex, rf.lastApplied, rf.role, rf.electionLastTime.Unix(), rf.electionExpired)
 }
 
 // return currentTerm and whether this server
@@ -158,8 +163,8 @@ type RequestVoteArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
-	term        int  // currentTerm of the receiver, for the sender to update itself
-	voteGranted bool // true means candidate received vote
+	Term        int  // currentTerm of the receiver, for the sender to update itself
+	VoteGranted bool // true means candidate received vote
 }
 
 //
@@ -167,6 +172,28 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	if args.Term > rf.currentTerm { // my term is too old
+		rf.currentTerm = args.Term // update my term first
+		rf.voteFor = -1            // in this new term, I didn't vote for anyone
+		rf.role = FOLLOWER         // convert myself to a follower, no matter what is my old role
+	}
+
+	if args.Term < rf.currentTerm { // my term is newer
+		reply.Term = rf.currentTerm // return my current term to update the sender
+		reply.VoteGranted = false   // the sender is too old, I don't vote for him
+		return
+	}
+
+	if rf.voteFor == -1 || rf.voteFor == args.CandidateId { // either I vote for nobody, or I vote for you already
+		// TODO: check whether candidate's log is AT LEAST as UP-TO_DATE as my log, if so, grant vote
+		reply.Term = rf.currentTerm
+		reply.VoteGranted = true
+		return
+	}
 }
 
 //
@@ -198,10 +225,12 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 // that the caller passes the address of the reply struct with &, not
 // the struct itself.
 //
-func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
-	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
-	return ok
-}
+// we don't use this one
+//
+//func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
+//	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+//	return ok
+//}
 
 //
 // the service using Raft (e.g. a k/v server) wants to start
@@ -281,7 +310,8 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.matchIndex = make([]int, len(peers)) // don't need to initialize now since I'm not a leader on first boot
 
 	// initialized extra attributes I added
-	rf.BecomeFollower() // all servers should be followers when starting up
+	rf.role = FOLLOWER // all servers should be followers when starting up
+	rf.ResetTimer()    // start the timer
 
 	go rf.SetTimer()    // set a timer to calculate elapsed time for election
 	go rf.SetApplier()  // set a applier to apply logs (send through applyCh)
@@ -294,43 +324,6 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 }
 
 //
-// used when a raft instance becomes a leader
-// to become a candidate, raft instance should pause its timer
-// so we reset its electionExpired and electionLastTime
-// we pause the timer by setting the electionLastTime to a the biggest value
-// this function doesn't lock raft instance, so you need to use mutex lock outside the function
-//
-func (rf *Raft) BecomeLeader() {
-	rf.role = LEADER
-	rf.electionExpired = false
-	rf.electionLastTime = time.Unix(math.MaxInt64, 0)
-}
-
-//
-// used when a raft instance becomes a candidate
-// to become a candidate, raft instance should reset its timer
-// so we reset its electionExpired and electionLastTime
-// this function doesn't lock raft instance, so you need to use mutex lock outside the function
-//
-func (rf *Raft) BecomeCandidate() {
-	rf.role = CANDIDATE
-	rf.electionExpired = false
-	rf.electionLastTime = time.Now()
-}
-
-//
-// used when a raft instance becomes a follower
-// to become a follower, raft instance should reset its timer
-// so we reset its electionExpired and electionLastTime
-// this function doesn't lock raft instance, so you need to use mutex lock outside the function
-//
-func (rf *Raft) BecomeFollower() {
-	rf.role = FOLLOWER
-	rf.electionExpired = false
-	rf.electionLastTime = time.Now()
-}
-
-//
 // the main raft routine periodically checks its state
 // if raft is a follower or candidate (not sure about this) with election timeout,
 // then it runs a election trying to become a leader
@@ -338,25 +331,32 @@ func (rf *Raft) BecomeFollower() {
 //
 func (rf *Raft) MainRoutine() {
 	for {
-		time.Sleep(10 * time.Millisecond) // sleep a while to save some CPU time
-		if rf.killed() {                  // if the raft instance is killed, it means this test is finished and we should quit
+		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
 			return
 		}
-		// TODO: add mutex lock if you want to access raft instance's state!
+		rf.mu.Lock()
+		rf.PrintLog()
 		switch rf.role {
 		case LEADER: // if you are a leader, then you should send heartbeats
+			rf.mu.Unlock() // release the lock now since to send heartBeat we will require the lock again
+			// TODO: send heartbeat via AppendEntries RPC
+			time.Sleep(10 * time.Millisecond) // after sleep a while, you need to send heartbeat again
 			break
 		case CANDIDATE: // if you are a candidate, you should start a election
 			rf.currentTerm++   // increment my current term
 			rf.voteFor = rf.me // vote for myself
+			rf.mu.Unlock()     // release the lock now since RunElection requires its own lock
 			rf.RunElection()   // send requestVote RPCs to all other servers
 			break
 		case FOLLOWER: // if you are a follower, you should do nothing but wait for RPC from your leader
 			if rf.electionExpired { // but first check election timeout
-				rf.BecomeCandidate() // if it expires, then convert to candidate and proceed
+				rf.role = CANDIDATE // if it expires, then convert to candidate and proceed
+				rf.ResetTimer()     // restart the election timer because I'm starting an election
 				continue
 			}
-			break // if no timeout then it is fine, RPC call is handled in its handler so nothing to do here
+			rf.mu.Unlock()                    // release the lock now since BecomeCandidate is not thread safe
+			time.Sleep(10 * time.Millisecond) // after sleep a while, and check if my timeout expires again
+			break                             // if no timeout then it is fine, RPC call is handled in its handler so nothing to do here
 		}
 	}
 }
@@ -386,17 +386,19 @@ func (rf *Raft) RunElection() {
 		}
 		args := RequestVoteArgs{term, candidateId, lastLogIndex, lastLogTerm}
 		reply := RequestVoteReply{}
-		go rf.RequestSingleVote(idx, &args, &reply, &upVote, &downVote) // send RPC to each server
+		go rf.sendRequestVote(idx, &args, &reply, &upVote, &downVote) // send RPC to each server
 	}
 
-	go func(rf *Raft) { // if I am no longer a candidate or election time expires, then quit this function
+	go func(rf *Raft) { // once I am no longer a candidate or election time expires, I will immediately quit this function
 		for { // since ultimately there will be election timeout, so this goroutine eventually quits
 			rf.mu.Lock()                                    // lock raft instance to access its role
 			if rf.role != CANDIDATE || rf.electionExpired { // check if I'm still a candidate and election timeout
-				electionDone.Signal()
+				electionDone.Signal() // notify the function that the state is changed
+				rf.mu.Unlock()        // since you will return in this if section, release the lock now
+				return                // time to bail!
 			}
 			rf.mu.Unlock()
-			time.Sleep(15 * time.Millisecond) // sleep a while to save CPU
+			time.Sleep(15 * time.Millisecond) // sleep a while to save CPU and check role later
 		}
 	}(rf)
 
@@ -407,9 +409,9 @@ func (rf *Raft) RunElection() {
 // send RequestVote RPC to a single server and handle the reply
 // also signal the voteDone cond var
 //
-func (rf *Raft) RequestSingleVote(server int, args *RequestVoteArgs, reply *RequestVoteReply, upVote *int, downVote *int) {
+func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply, upVote *int, downVote *int) {
 
-	rf.sendRequestVote(server, args, reply)
+	rf.peers[server].Call("Raft.RequestVote", args, reply)
 
 	// TODO: do we really have to discard reply with a different term that mismatches args' term?
 
@@ -420,23 +422,24 @@ func (rf *Raft) RequestSingleVote(server int, args *RequestVoteArgs, reply *Requ
 		return
 	}
 
-	if reply.term < rf.currentTerm { // this RPC is too old (a newer term now), just discard it
+	if reply.Term < rf.currentTerm { // this RPC is too old (a newer term now), just discard it
 		return
 	}
 
-	if reply.term > rf.currentTerm { // someone's term is bigger than me, so I'm not the newest one
-		rf.currentTerm = reply.term // update my current term
-		rf.BecomeFollower()         // convert to follower
+	if reply.Term > rf.currentTerm { // someone's term is bigger than me, so I'm not the newest one
+		rf.currentTerm = reply.Term // update my current term
+		rf.role = FOLLOWER          // convert to follower
+		return
 	}
 
-	if reply.voteGranted { // this server agree to vote for me
+	if reply.VoteGranted { // this server agree to vote for me
 		*upVote++
 		if *upVote > len(rf.peers)/2 { // I won majority
-			rf.BecomeLeader() // so I'm a leader now
+			rf.role = LEADER // so I'm a leader now
 		}
 	} else { // this server agree to vote for me
-		*downVote++         // I lost majority
-		rf.BecomeFollower() // so I'm a follower now
+		*downVote++        // I lost majority
+		rf.role = FOLLOWER // so I'm a follower now
 	}
 }
 
@@ -470,6 +473,7 @@ func (rf *Raft) SetTimer() {
 		time.Sleep(10 * time.Millisecond) // sleep a while to save some CPU time
 		electionCurrentTime := time.Now()
 		rf.mu.Lock()
+		log.Printf("Raft server %d reports\nCurrent time: %d, electionLasttime: %d\n\n", rf.me, electionCurrentTime.Unix(), rf.electionLastTime.Unix())
 		if electionCurrentTime.Unix()-rf.electionLastTime.Unix() > int64(timeout) { // timeout!
 			rf.electionExpired = true                 // election time expired! you should run a new election now
 			rf.electionLastTime = electionCurrentTime // reset the timer
@@ -477,4 +481,12 @@ func (rf *Raft) SetTimer() {
 		}
 		rf.mu.Unlock()
 	}
+}
+
+//
+// reset timer
+//
+func (rf *Raft) ResetTimer() {
+	rf.electionExpired = false
+	rf.electionLastTime = time.Now()
 }
