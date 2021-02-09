@@ -90,8 +90,8 @@ type Raft struct {
 }
 
 func (rf *Raft) PrintLog() {
-	log.Printf("Raft server %d reports\nCurrentTerm: %d, voteFor: %d, commitIndex: %d, lastApplied: %d, role: %d, electionLastTime: %d, electionExpired: %t\n\n\n",
-		rf.me, rf.currentTerm, rf.voteFor, rf.commitIndex, rf.lastApplied, rf.role, rf.electionLastTime.Unix(), rf.electionExpired)
+	log.Printf("Raft server %d reports\nCurrentTerm: %d, voteFor: %d, commitIndex: %d, lastApplied: %d, role: %d, electionExpired: %t\n\n\n",
+		rf.me, rf.currentTerm, rf.voteFor, rf.commitIndex, rf.lastApplied, rf.role, rf.electionExpired)
 }
 
 // return currentTerm and whether this server
@@ -192,6 +192,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		// TODO: check whether candidate's log is AT LEAST as UP-TO_DATE as my log, if so, grant vote
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = true
+		return
+	} else {
+		reply.Term = rf.currentTerm
+		reply.VoteGranted = false
 		return
 	}
 }
@@ -299,7 +303,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	// persistent state on all servers
 	rf.currentTerm = 0       // initialized to 0 on first boot, increases monotonically
 	rf.voteFor = -1          // initialized to -1 to indicate I vote for no one at beginning
-	rf.logs = make([]Log, 0) // // initialized to my logs to a empty array slice
+	rf.logs = make([]Log, 1) // // log array slice starts with 1!
 
 	// volatile state on all servers
 	rf.commitIndex = 0 // initialized to 0, increases monotonically
@@ -335,7 +339,7 @@ func (rf *Raft) MainRoutine() {
 			return
 		}
 		rf.mu.Lock()
-		rf.PrintLog()
+		//rf.PrintLog()
 		switch rf.role {
 		case LEADER: // if you are a leader, then you should send heartbeats
 			rf.mu.Unlock() // release the lock now since to send heartBeat we will require the lock again
@@ -352,6 +356,7 @@ func (rf *Raft) MainRoutine() {
 			if rf.electionExpired { // but first check election timeout
 				rf.role = CANDIDATE // if it expires, then convert to candidate and proceed
 				rf.ResetTimer()     // restart the election timer because I'm starting an election
+				rf.mu.Unlock()      // release the lock since you are going to the next iteration
 				continue
 			}
 			rf.mu.Unlock()                    // release the lock now since BecomeCandidate is not thread safe
@@ -376,7 +381,7 @@ func (rf *Raft) RunElection() {
 	lastLogTerm := rf.logs[lastLogIndex].term // term of my last log entry
 	rf.mu.Unlock()
 
-	electionDone := sync.NewCond(new(sync.Mutex))
+	electionDone := make(chan int, 1)
 	upVote := 1   // how many servers agree to vote for me (initialized to 1 since I vote for myself!)
 	downVote := 0 // how many servers disagree to vote for me
 
@@ -389,20 +394,20 @@ func (rf *Raft) RunElection() {
 		go rf.sendRequestVote(idx, &args, &reply, &upVote, &downVote) // send RPC to each server
 	}
 
-	go func(rf *Raft) { // once I am no longer a candidate or election time expires, I will immediately quit this function
+	go func(rf *Raft, done chan int) { // once I am no longer a candidate or election time expires, I will immediately quit this function
 		for { // since ultimately there will be election timeout, so this goroutine eventually quits
 			rf.mu.Lock()                                    // lock raft instance to access its role
 			if rf.role != CANDIDATE || rf.electionExpired { // check if I'm still a candidate and election timeout
-				electionDone.Signal() // notify the function that the state is changed
-				rf.mu.Unlock()        // since you will return in this if section, release the lock now
-				return                // time to bail!
+				rf.mu.Unlock() // since you will return in this if section, release the lock now
+				done <- 1      // notify the function that the state is changed
+				return         // time to bail!
 			}
 			rf.mu.Unlock()
 			time.Sleep(15 * time.Millisecond) // sleep a while to save CPU and check role later
 		}
-	}(rf)
+	}(rf, electionDone)
 
-	electionDone.Wait() // wait for the election checker goroutine above
+	<-electionDone // wait for the election checker goroutine above
 }
 
 //
@@ -464,7 +469,7 @@ func (rf *Raft) SetApplier() {
 // to notify itself it should run a new election
 //
 func (rf *Raft) SetTimer() {
-	rand.Seed(time.Now().Unix())    // set a random number seed to ensure it generates different random number
+	rand.Seed(int64(rf.me))         // set a random number seed to ensure it generates different random number
 	timeout := rand.Int()%150 + 150 // generate a random timeout threshold between 150 to 300ms
 	for {
 		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
@@ -473,8 +478,8 @@ func (rf *Raft) SetTimer() {
 		time.Sleep(10 * time.Millisecond) // sleep a while to save some CPU time
 		electionCurrentTime := time.Now()
 		rf.mu.Lock()
-		log.Printf("Raft server %d reports\nCurrent time: %d, electionLasttime: %d\n\n", rf.me, electionCurrentTime.Unix(), rf.electionLastTime.Unix())
-		if electionCurrentTime.Unix()-rf.electionLastTime.Unix() > int64(timeout) { // timeout!
+		//log.Printf("Raft server %d reports\nCurrent time: %d, electionLasttime: %d\n\n", rf.me, electionCurrentTime.Unix(), rf.electionLastTime.Unix())
+		if electionCurrentTime.Sub(rf.electionLastTime).Milliseconds() > int64(timeout) {
 			rf.electionExpired = true                 // election time expired! you should run a new election now
 			rf.electionLastTime = electionCurrentTime // reset the timer
 			timeout = rand.Int()%150 + 150            // reset the random timeout threshold
