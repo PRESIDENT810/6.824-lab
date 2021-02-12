@@ -499,36 +499,35 @@ func (rf *Raft) MainRoutine() {
 		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
 			return
 		}
-		fmt.Printf("\n=====================================================================================================\n")
-		fmt.Printf("=================================[Server%d] MainRoutine Getting Lock=================================\n", rf.me)
-		fmt.Printf("=====================================================================================================\n")
+		//fmt.Printf("=================================[Server%d] MainRoutine Lock=================================\n", rf.me)
 		rf.mu.Lock() // TODO: deadlock here
 		role := rf.role
+		//fmt.Printf("=================================[Server%d] MainRoutine Unlock=================================\n", rf.me)
 		rf.mu.Unlock()
 		//logMutex.Lock()
 		//rf.LogServerStates()
 		//logMutex.Unlock()
 		switch role {
 		case LEADER: // if you are a leader, then you should send heartbeats
-			fmt.Printf("\n=====================================================================================================\n")
-			fmt.Printf("=================================[Server%d] is LEADER=================================\n", rf.me)
-			fmt.Printf("=====================================================================================================\n")
+			//fmt.Printf("\n=====================================================================================================\n")
+			//fmt.Printf("=================================[Server%d] is LEADER=================================\n", rf.me)
+			//fmt.Printf("=====================================================================================================\n")
 			go rf.SendHeartbeats() // block here to ensure that no more than 10 heartbeat being sent in a second
 			time.Sleep(100 * time.Millisecond)
 			break
 		case CANDIDATE: // if you are a candidate, you should start a election
-			fmt.Printf("\n=====================================================================================================\n")
-			fmt.Printf("=================================[Server%d] is CANDIDATE=================================\n", rf.me)
-			fmt.Printf("=====================================================================================================\n")
+			//fmt.Printf("\n=====================================================================================================\n")
+			//fmt.Printf("=================================[Server%d] is CANDIDATE=================================\n", rf.me)
+			//fmt.Printf("=====================================================================================================\n")
 			rf.currentTerm++                  // increment my current term
 			rf.voteFor = rf.me                // vote for myself
 			go rf.RunElection()               // block here since we only proceed either with a election result or timeout
 			time.Sleep(50 * time.Millisecond) // after sleep a while, and check if my timeout expires again
 			break
 		case FOLLOWER: // if you are a follower, you should do nothing but wait for RPC from your leader
-			fmt.Printf("\n=====================================================================================================\n")
-			fmt.Printf("=================================[Server%d] is FOLLOWER=================================\n", rf.me)
-			fmt.Printf("=====================================================================================================\n")
+			//fmt.Printf("\n=====================================================================================================\n")
+			//fmt.Printf("=================================[Server%d] is FOLLOWER=================================\n", rf.me)
+			//fmt.Printf("=====================================================================================================\n")
 			if rf.electionExpired { // but first check election timeout
 				rf.role = CANDIDATE // if it expires, then convert to candidate and proceed
 			}
@@ -616,23 +615,20 @@ func (rf *Raft) RequestReplication(command interface{}) {
 		go rf.SendAppendEntries(idx, args, reply, &statuses[idx], &statusMutex) // pass a copy instead of reference (I think args and reply may lost after it returns)
 	}
 
-	go func(status []int, allArgs []AppendEntriesArgs, allReply []AppendEntriesReply) {
-		for { // since ultimately there will be election timeout, so this goroutine eventually quits
-			time.Sleep(30 * time.Millisecond) // sleep a while to save CPU and check role later
-			statusMutex.Lock()
-			// TODO: if majority has replicated a log, increment commitIndex
-			for i, status := range status {
-				if status == FAIL { // if RPC failed, then retry this RPC until it succeed
-					time.Sleep(100 * time.Millisecond)                                              // sleep a while and try again
-					go rf.SendAppendEntries(i, allArgs[i], allReply[i], &statuses[i], &statusMutex) // retry with exactly the same args
-					_ = i
-				}
-			}
-			statusMutex.Unlock()
-
-		}
-	}(statuses, allArgs, allReply)
-
+	// TODO: use a chan with buffer to communicate so we know which RPC we should retry
+	//go func(status []int, allArgs []AppendEntriesArgs, allReply []AppendEntriesReply) {
+	//	for { // since ultimately there will be election timeout, so this goroutine eventually quits
+	//		time.Sleep(30 * time.Millisecond) // sleep a while to save CPU and check role later
+	//		statusMutex.Lock()
+	//		for i, status := range status {
+	//			if status == FAIL { // if RPC failed, then retry this RPC until it succeed
+	//				go rf.SendAppendEntries(i, allArgs[i], allReply[i], &statuses[i], &statusMutex) // retry with exactly the same args
+	//				_ = i
+	//			}
+	//		}
+	//		statusMutex.Unlock()
+	//	}
+	//}(statuses, allArgs, allReply)
 }
 
 //
@@ -643,19 +639,25 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 	defer log.Printf("[Server%d] quits SendAppendEntries with prevLogIndex %d in term %d\n", rf.me, args.PrevLogIndex, args.Term)
 
 	success := rf.peers[server].Call("Raft.AppendEntries", &args, &reply)
+	//fmt.Printf("=================================[Server%d] SendAppendEntries Status Lock=================================\n", rf.me)
 	statusMutex.Lock()
 	if !success { // RPC failed
 		*result = FAIL // set status to FAIL
 		log.Printf("AppendEntries from LEADER %d to FOLLOWER %d RPC failed\n", rf.me, server)
+		//fmt.Printf("=================================[Server%d] SendAppendEntries Status Unlock=================================\n", rf.me)
 		statusMutex.Unlock()
+		// TODO: this might be where deadlock occurs
 		return
 	} else {
 		*result = SUCCESS
 	}
+	//fmt.Printf("=================================[Server%d] SendAppendEntries Status Unlock=================================\n", rf.me)
 	statusMutex.Unlock()
 
+	//fmt.Printf("=================================[Server%d] SendAppendEntries Lock=================================\n", rf.me)
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	//defer fmt.Printf("=================================[Server%d] SendAppendEntries Lock=================================\n", rf.me)
 	defer rf.LogAppendEntriesSend(rf.me, server, &args, &reply)
 
 	if reply.Term > rf.currentTerm { // I should no longer be the leader since my term is too old
@@ -765,8 +767,10 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 	}
 	// TODO: do we really have to discard reply with a different term that mismatches args' term?
 
+	//fmt.Printf("=================================[Server%d] SendRequestVote Lock=================================\n", rf.me)
 	rf.mu.Lock()         // add mutex lock before you access attributes of raft instance
 	defer rf.mu.Unlock() // release mutex lock when the function quits
+	//defer fmt.Printf("=================================[Server%d] SendRequestVote Unlock=================================\n", rf.me)
 	defer rf.LogRequestVoteSend(rf.me, server, &args, &reply)
 
 	if rf.role != CANDIDATE { // no need to count the vote since I'm no longer a candidate
@@ -814,13 +818,16 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 	for {
 		time.Sleep(100 * time.Millisecond)
 		for {
+			//fmt.Printf("=================================[Server%d] Applier Lock=================================\n", rf.me)
 			rf.mu.Lock()
 			if rf.lastApplied < rf.commitIndex { // there is log committed but not applied
 				rf.lastApplied++ // now apply the next command
+				//fmt.Printf("=================================[Server%d] Committer Unlock=================================\n", rf.me)
 				rf.mu.Unlock()
 				applyMsg := ApplyMsg{true, rf.logs[rf.lastApplied].Command, rf.lastApplied}
 				applyCh <- applyMsg
 			} else {
+				//fmt.Printf("=================================[Server%d] Applier Unlock=================================\n", rf.me)
 				rf.mu.Unlock()
 				break
 			}
@@ -842,8 +849,10 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 //
 func (rf *Raft) SetCommitter() {
 	for {
+		//fmt.Printf("=================================[Server%d] Committer Lock=================================\n", rf.me)
 		rf.mu.Lock()
 		if rf.role != LEADER { // if I'm not leader, I have no right to increment commitIndex here
+			//fmt.Printf("=================================[Server%d] Committer Unlock=================================\n", rf.me)
 			rf.mu.Unlock()
 			return
 		}
@@ -865,8 +874,9 @@ func (rf *Raft) SetCommitter() {
 				rf.commitIndex = N
 				break
 			}
-
+			N--
 		}
+		//fmt.Printf("=================================[Server%d] Committer Unlock=================================\n", rf.me)
 		rf.mu.Unlock()
 		time.Sleep(20 * time.Millisecond)
 		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
