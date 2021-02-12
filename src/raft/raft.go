@@ -407,12 +407,13 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	index := len(rf.logs)
+	rf.logs = append(rf.logs, Log{rf.currentTerm, command}) // log to replicate to the cluster
 	term := rf.currentTerm
 	isLeader := rf.role == LEADER
 
 	if isLeader {
 		log.Printf("\n===============================New log from client to server %d with term %d===============================\n", rf.me, term)
-		go rf.RequestReplication(command)
+		go rf.RequestReplication(index)
 	}
 
 	return index, term, isLeader
@@ -582,16 +583,15 @@ func (rf *Raft) SendHeartbeats() {
 // if majority of the cluster replied success, then the logs are regard as replicated
 // then we commit these logs on the leader side, and followers will commit these in consequent AppendEntries RPCs
 //
-func (rf *Raft) RequestReplication(command interface{}) {
+func (rf *Raft) RequestReplication(commandIndex int) {
 	log.Printf("[Server%d] enters RequestReplication", rf.me)
 	defer log.Printf("[Server%d] quits RequestReplication", rf.me)
 
-	rf.mu.Lock()                                            // lock raft instance to prepare the RPC arguments
-	rf.logs = append(rf.logs, Log{rf.currentTerm, command}) // log to replicate to the cluster
-	term := rf.currentTerm                                  // my term
-	leaderId := rf.me                                       // current leader, which is me
-	leaderCommit := rf.commitIndex                          // last log I committed
-	rf.mu.Unlock()                                          // unlock raft when RPC arguments are prepared
+	rf.mu.Lock()                   // lock raft instance to prepare the RPC arguments
+	term := rf.currentTerm         // my term
+	leaderId := rf.me              // current leader, which is me
+	leaderCommit := rf.commitIndex // last log I committed
+	rf.mu.Unlock()                 // unlock raft when RPC arguments are prepared
 
 	statusMutex := sync.Mutex{}
 	statuses := make([]int, len(rf.peers))                // whether each peer's RPC succeed or not, all initialized to 0 (SENDING)
@@ -856,11 +856,8 @@ func (rf *Raft) SetCommitter() {
 			rf.mu.Unlock()
 			return
 		}
-		N := len(rf.logs) - 1 // N must not exceed log's bound
-		for {                 // check if such N exists
-			if N <= rf.commitIndex { // N must larger than commitIndex
-				break
-			}
+		// N must not exceed log's bound
+		for N := len(rf.logs) - 1; N > rf.commitIndex; N-- { // check if such N exists
 			replicatedCnt := 1                            // how many servers have replicated this log, initialized to 1 since I already have this log
 			for server, matchIdx := range rf.matchIndex { // count how many server replicated my log at N
 				if server == rf.me { // no need to count me since I already replicated my log
