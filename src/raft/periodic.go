@@ -1,7 +1,6 @@
 package raft
 
 import (
-	"fmt"
 	"math/rand"
 	"time"
 )
@@ -15,16 +14,16 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 	for {
 		time.Sleep(100 * time.Millisecond)
 		for {
-			//fmt.Printf("=================================[Server%d] Applier Lock=================================\n", rf.me)
+			//Printf("=================================[Server%d] Applier Lock=================================\n", rf.me)
 			rf.mu.Lock()
 			if rf.lastApplied < rf.commitIndex { // there is log committed but not applied
 				rf.lastApplied++ // now apply the next command
-				//fmt.Printf("=================================[Server%d] Committer Unlock=================================\n", rf.me)
+				//Printf("=================================[Server%d] Committer Unlock=================================\n", rf.me)
 				rf.mu.Unlock()
 				applyMsg := ApplyMsg{true, rf.logs[rf.lastApplied].Command, rf.lastApplied}
 				applyCh <- applyMsg
 			} else {
-				//fmt.Printf("=================================[Server%d] Applier Unlock=================================\n", rf.me)
+				//Printf("=================================[Server%d] Applier Unlock=================================\n", rf.me)
 				rf.mu.Unlock()
 				break
 			}
@@ -46,10 +45,10 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 //
 func (rf *Raft) SetCommitter() {
 	for {
-		//fmt.Printf("=================================[Server%d] Committer Lock=================================\n", rf.me)
+		//Printf("=================================[Server%d] Committer Lock=================================\n", rf.me)
 		rf.mu.Lock()
 		if rf.role != LEADER { // if I'm not leader, I have no right to increment commitIndex here
-			//fmt.Printf("=================================[Server%d] Committer Unlock=================================\n", rf.me)
+			//Printf("=================================[Server%d] Committer Unlock=================================\n", rf.me)
 			rf.mu.Unlock()
 			return
 		}
@@ -70,7 +69,7 @@ func (rf *Raft) SetCommitter() {
 			}
 			N--
 		}
-		//fmt.Printf("=================================[Server%d] Committer Unlock=================================\n", rf.me)
+		//Printf("=================================[Server%d] Committer Unlock=================================\n", rf.me)
 		rf.mu.Unlock()
 		time.Sleep(20 * time.Millisecond)
 		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
@@ -98,7 +97,7 @@ func (rf *Raft) SetTimer() {
 		if electionCurrentTime.Sub(rf.electionLastTime).Milliseconds() > int64(timeout) {
 			rf.electionExpired = true // election time expired! you should run a new election now
 			if rf.role != LEADER {
-				fmt.Printf("[Server%d]'s election time expired\n\n", rf.me)
+				Printf("[Server%d]'s election time expired\n\n", rf.me)
 			}
 			rf.electionLastTime = electionCurrentTime // reset the timer
 			timeout = rand.Int()%150 + 150            // reset the random timeout threshold

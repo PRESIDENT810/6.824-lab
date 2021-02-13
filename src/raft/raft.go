@@ -18,8 +18,6 @@ package raft
 //
 
 import (
-	"log"
-	"strconv"
 	"sync"
 	"time"
 )
@@ -60,13 +58,11 @@ const (
 	FAIL    = 2
 )
 
+const showLog = false
+
 type Log struct {
 	Term    int         // the term for this log entry
 	Command interface{} // empty interface for the actual command of this log entry
-}
-
-func (log *Log) String() string {
-	return strconv.Itoa(log.Term)
 }
 
 //
@@ -172,7 +168,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	term := rf.currentTerm
 	isLeader := rf.role == LEADER
 
-	log.Printf("\n====================New log %d from client to server %d with term %d, isLeader=%t====================\n", command, rf.me, term, isLeader)
+	Printf("\n====================New log %d from client to server %d with term %d, isLeader=%t====================\n", command, rf.me, term, isLeader)
 
 	if isLeader {
 		rf.logs = append(rf.logs, Log{rf.currentTerm, command}) // log to replicate to the cluster
@@ -263,26 +259,25 @@ func (rf *Raft) MainRoutine() {
 		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
 			return
 		}
-		//fmt.Printf("=================================[Server%d] MainRoutine Lock=================================\n", rf.me)
-		rf.mu.Lock() // TODO: deadlock here
+		//Printf("=================================[Server%d] MainRoutine Lock=================================\n", rf.me)
 		role := rf.role
-		//fmt.Printf("=================================[Server%d] MainRoutine Unlock=================================\n", rf.me)
+		//Printf("=================================[Server%d] MainRoutine Unlock=================================\n", rf.me)
 		rf.mu.Unlock()
 		logMutex.Lock()
 		rf.LogServerStates()
 		logMutex.Unlock()
 		switch role {
 		case LEADER: // if you are a leader, then you should send heartbeats
-			//fmt.Printf("\n=====================================================================================================\n")
-			//fmt.Printf("=================================[Server%d] is LEADER=================================\n", rf.me)
-			//fmt.Printf("=====================================================================================================\n")
+			//Printf("\n=====================================================================================================\n")
+			//Printf("=================================[Server%d] is LEADER=================================\n", rf.me)
+			//Printf("=====================================================================================================\n")
 			go rf.SendHeartbeats() // block here to ensure that no more than 10 heartbeat being sent in a second
 			time.Sleep(100 * time.Millisecond)
 			break
 		case CANDIDATE: // if you are a candidate, you should start a election
-			//fmt.Printf("\n=====================================================================================================\n")
-			//fmt.Printf("=================================[Server%d] is CANDIDATE=================================\n", rf.me)
-			//fmt.Printf("=====================================================================================================\n")
+			//Printf("\n=====================================================================================================\n")
+			//Printf("=================================[Server%d] is CANDIDATE=================================\n", rf.me)
+			//Printf("=====================================================================================================\n")
 			rf.mu.Lock()
 			if rf.electionExpired {
 				rf.currentTerm++           // increment my current term
@@ -294,9 +289,9 @@ func (rf *Raft) MainRoutine() {
 			time.Sleep(50 * time.Millisecond)
 			break
 		case FOLLOWER: // if you are a follower, you should do nothing but wait for RPC from your leader
-			//fmt.Printf("\n=====================================================================================================\n")
-			//fmt.Printf("=================================[Server%d] is FOLLOWER=================================\n", rf.me)
-			//fmt.Printf("=====================================================================================================\n")
+			//Printf("\n=====================================================================================================\n")
+			//Printf("=================================[Server%d] is FOLLOWER=================================\n", rf.me)
+			//Printf("=====================================================================================================\n")
 			if rf.electionExpired { // but first check election timeout
 				rf.ResetTimer()     // restart election timer if I am starting an election
 				rf.role = CANDIDATE // if it expires, then convert to candidate and proceed
