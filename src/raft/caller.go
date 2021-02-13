@@ -86,12 +86,10 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		return
 	}
 
-	Printf("\n%d->%d: arg=%v, reply=%v\n", rf.me, server, args, reply)
-
-	//Printf("=================================[Server%d] SendAppendEntries Lock=================================\n", rf.me)
+	PrintLock("=================================[Server%d] SendAppendEntries Lock=================================\n", rf.me)
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	//defer Printf("=================================[Server%d] SendAppendEntries Lock=================================\n", rf.me)
+	defer PrintLock("=================================[Server%d] SendAppendEntries Lock=================================\n", rf.me)
 	defer rf.LogAppendEntriesSend(rf.me, server, &args, &reply)
 
 	if args.Term != rf.currentTerm { // a long winding path of blood, sweat, tears and despair
@@ -101,6 +99,7 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 	if reply.Term > rf.currentTerm { // I should no longer be the leader since my term is too old
 		rf.currentTerm = reply.Term // set currentTerm = T
 		rf.role = FOLLOWER          // convert to follower
+		rf.ResetTimer()
 		return
 	}
 
@@ -141,13 +140,15 @@ func (rf *Raft) RunElection() {
 	Printf("[Server%d] enters RunElection\n", rf.me)
 	defer Printf("[Server%d] quits RunElection\n", rf.me)
 
+	PrintLock("=================================[Server%d] RunElection Lock=================================\n", rf.me)
 	rf.mu.Lock()                              // lock raft instance to prepare the RPC arguments
 	rf.ResetTimer()                           // reset the election timer because when starting an election
 	term := rf.currentTerm                    // my term
 	candidateId := rf.me                      // candidate id, which is me!
 	lastLogIndex := len(rf.logs) - 1          // index of my last log entry
 	lastLogTerm := rf.logs[lastLogIndex].Term // term of my last log entry
-	rf.mu.Unlock()                            // unlock raft when RPC arguments are prepared
+	PrintLock("=================================[Server%d] RunElection Unlock=================================\n", rf.me)
+	rf.mu.Unlock() // unlock raft when RPC arguments are prepared
 
 	//electionDone := make(chan int, 1)
 	upVote := 1   // how many servers agree to vote for me (initialized to 1 since I vote for myself!)
@@ -178,10 +179,10 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 	}
 	// TODO: do we really have to discard reply with a different term that mismatches args' term?
 
-	//Printf("=================================[Server%d] SendRequestVote Lock=================================\n", rf.me)
+	PrintLock("=================================[Server%d] SendRequestVote Lock=================================\n", rf.me)
 	rf.mu.Lock()         // add mutex lock before you access attributes of raft instance
 	defer rf.mu.Unlock() // release mutex lock when the function quits
-	//defer Printf("=================================[Server%d] SendRequestVote Unlock=================================\n", rf.me)
+	defer PrintLock("=================================[Server%d] SendRequestVote Unlock=================================\n", rf.me)
 	defer rf.LogRequestVoteSend(rf.me, server, &args, &reply)
 
 	if args.Term != rf.currentTerm { // a long winding path of blood, sweat, tears and despair
@@ -199,6 +200,7 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 	if reply.Term > rf.currentTerm { // someone's term is bigger than me, so I'm not the newest one
 		rf.currentTerm = reply.Term // update my current term
 		rf.role = FOLLOWER          // convert to follower
+		rf.ResetTimer()
 		return
 	}
 

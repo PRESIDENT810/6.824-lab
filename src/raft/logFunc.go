@@ -7,8 +7,16 @@ import (
 
 var logMutex sync.Mutex
 
+// wrapper of fmt.Printf, if showLog is false, then don't print log about states
 func Printf(format string, a ...interface{}) {
 	if showLog {
+		fmt.Printf(format, a...)
+	}
+}
+
+// wrapper of fmt.Printf, if showLock is false, then don't print log about locks
+func PrintLock(format string, a ...interface{}) {
+	if showLock {
 		fmt.Printf(format, a...)
 	}
 }

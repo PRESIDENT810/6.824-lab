@@ -14,16 +14,16 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 	for {
 		time.Sleep(100 * time.Millisecond)
 		for {
-			//Printf("=================================[Server%d] Applier Lock=================================\n", rf.me)
+			PrintLock("=================================[Server%d] Applier Lock=================================\n", rf.me)
 			rf.mu.Lock()
 			if rf.lastApplied < rf.commitIndex { // there is log committed but not applied
 				rf.lastApplied++ // now apply the next command
-				//Printf("=================================[Server%d] Committer Unlock=================================\n", rf.me)
+				PrintLock("=================================[Server%d] Applier Unlock=================================\n", rf.me)
 				rf.mu.Unlock()
 				applyMsg := ApplyMsg{true, rf.logs[rf.lastApplied].Command, rf.lastApplied}
 				applyCh <- applyMsg
 			} else {
-				//Printf("=================================[Server%d] Applier Unlock=================================\n", rf.me)
+				PrintLock("=================================[Server%d] Applier Unlock=================================\n", rf.me)
 				rf.mu.Unlock()
 				break
 			}
@@ -45,10 +45,10 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 //
 func (rf *Raft) SetCommitter() {
 	for {
-		//Printf("=================================[Server%d] Committer Lock=================================\n", rf.me)
+		PrintLock("=================================[Server%d] Committer Lock=================================\n", rf.me)
 		rf.mu.Lock()
 		if rf.role != LEADER { // if I'm not leader, I have no right to increment commitIndex here
-			//Printf("=================================[Server%d] Committer Unlock=================================\n", rf.me)
+			PrintLock("=================================[Server%d] Committer Unlock=================================\n", rf.me)
 			rf.mu.Unlock()
 			return
 		}
@@ -69,7 +69,7 @@ func (rf *Raft) SetCommitter() {
 			}
 			N--
 		}
-		//Printf("=================================[Server%d] Committer Unlock=================================\n", rf.me)
+		PrintLock("=================================[Server%d] Committer Unlock=================================\n", rf.me)
 		rf.mu.Unlock()
 		time.Sleep(20 * time.Millisecond)
 		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit

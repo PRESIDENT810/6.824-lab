@@ -46,9 +46,11 @@ type AppendEntriesReply struct {
 // AppendEntries RPC handler
 //
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	PrintLock("=================================[Server%d] AppendEntries handler lock=================================\n", rf.me)
 	rf.mu.Lock()
 	rf.LogAppendEntriesReceive(args, reply)
 	defer rf.mu.Unlock()
+	defer PrintLock("=================================[Server%d] AppendEntries handler Unlock=================================\n", rf.me)
 
 	if args.Term < rf.currentTerm { // my term is newer
 		reply.Term = rf.currentTerm // return my current term to update the sender
@@ -97,9 +99,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // RequestVote RPC handler.
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
+	PrintLock("=================================[Server%d] RequestVote handler lock=================================\n", rf.me)
 	rf.mu.Lock()
 	rf.LogRequestVoteReceive(args, reply)
 	defer rf.mu.Unlock()
+	defer PrintLock("=================================[Server%d] RequestVote handler unlock=================================\n", rf.me)
 
 	upToDate := true // is your log more up-to-date?
 	myLastLogIndex := len(rf.logs) - 1

@@ -58,7 +58,11 @@ const (
 	FAIL    = 2
 )
 
-const showLog = false
+// whether show corresponding log
+const (
+	showLog  = false
+	showLock = false
+)
 
 type Log struct {
 	Term    int         // the term for this log entry
@@ -259,9 +263,10 @@ func (rf *Raft) MainRoutine() {
 		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
 			return
 		}
-		//Printf("=================================[Server%d] MainRoutine Lock=================================\n", rf.me)
+		rf.mu.Lock()
+		PrintLock("=================================[Server%d] MainRoutine Lock=================================\n", rf.me)
 		role := rf.role
-		//Printf("=================================[Server%d] MainRoutine Unlock=================================\n", rf.me)
+		PrintLock("=================================[Server%d] MainRoutine Unlock=================================\n", rf.me)
 		rf.mu.Unlock()
 		logMutex.Lock()
 		rf.LogServerStates()
@@ -292,7 +297,10 @@ func (rf *Raft) MainRoutine() {
 			//Printf("\n=====================================================================================================\n")
 			//Printf("=================================[Server%d] is FOLLOWER=================================\n", rf.me)
 			//Printf("=====================================================================================================\n")
-			if rf.electionExpired { // but first check election timeout
+			rf.mu.Lock()
+			electionExpired := rf.electionExpired
+			rf.mu.Unlock()
+			if electionExpired { // but first check election timeout
 				rf.ResetTimer()     // restart election timer if I am starting an election
 				rf.role = CANDIDATE // if it expires, then convert to candidate and proceed
 				break
