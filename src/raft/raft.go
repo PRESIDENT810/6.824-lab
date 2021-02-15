@@ -377,7 +377,7 @@ func (rf *Raft) findLastIndex(term int) int {
 			return i
 		}
 	}
-	panic("findLastIndex fucked up!!!")
+	//panic("findLastIndex fucked up!!!")
 	return -1 // if we return -1, then this is really fucked up
 }
 
