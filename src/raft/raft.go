@@ -399,6 +399,6 @@ func (rf *Raft) findFirstIndex(term int) int {
 			return i
 		}
 	}
-	panic("findFirstIndex fucked up!!!")
+	//panic("findFirstIndex fucked up!!!")
 	return -1 // if we return -1, then this is really fucked up
 }

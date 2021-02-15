@@ -236,22 +236,28 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 // then this function should not be called because someone else already adjusted the value of nextIndex
 //
 func (rf *Raft) findNextIndex(args *AppendEntriesArgs, reply *AppendEntriesReply, server int) int {
+	res := -1
+
 	// case 1: he doesn't even have a entry at this index, so I should retry at his last entry's index
 	if reply.ConflictTerm == -2 {
-		return reply.TryNextIndex
+		res = reply.TryNextIndex
 	}
 
 	// case 2: his term at prevLogIndex is newer, so I should retry at the index he gave me
 	if reply.ConflictTerm > args.PrevLogTerm {
-		return reply.TryNextIndex
+		res = reply.TryNextIndex
 	}
 
 	// case 3: my term at prevLogIndex is newer, so I should retry at the index of my last entry with the term he gave me (or the term "just" smaller than this one)
 	if reply.ConflictTerm < args.PrevLogTerm {
 		lastIndex := rf.findLastIndex(reply.ConflictTerm)
-		return lastIndex
+		if lastIndex != -1 {
+			res = lastIndex
+		}
 	}
 
-	// not sure when should we have this case, but if things fucked up, comment 3 cases above and use this as returned value
-	return rf.nextIndex[server] - 1
+	if res == -1 { // not sure when should we have this case, but if things fucked up, comment 3 cases above and use this as returned value
+		return rf.nextIndex[server] - 1 // I don't know when the result will be -1, but if it is, then just return nextIndex-1
+	}
+	return res
 }
