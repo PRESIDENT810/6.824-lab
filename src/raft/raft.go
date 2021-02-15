@@ -18,6 +18,9 @@ package raft
 //
 
 import (
+	"bytes"
+	"labgob"
+	"log"
 	"sync"
 	"time"
 )
@@ -64,9 +67,23 @@ const (
 	showLock = false
 )
 
+// if raft instance is supposed to save its state, pass a integer to this channel
+var stateChange chan int
+
 type Log struct {
 	Term    int         // the term for this log entry
 	Command interface{} // empty interface for the actual command of this log entry
+}
+
+//
+// struct for persistent states of a raft instance
+// when saving raft's state, encode these attributes via gob
+// when reading raft's state, decode these attributes via gob
+//
+type PersistentState struct {
+	CurrentTerm int
+	VoteFor     int
+	Logs        []Log
 }
 
 //
@@ -119,14 +136,18 @@ func (rf *Raft) GetState() (int, bool) {
 // see paper's Figure 2 for a description of what should be persistent.
 //f
 func (rf *Raft) persist() {
-	// Your code here (2C).
-	// Example:
-	// w := new(bytes.Buffer)
-	// e := labgob.NewEncoder(w)
-	// e.Encode(rf.xxx)
-	// e.Encode(rf.yyy)
-	// data := w.Bytes()
-	// rf.persister.SaveRaftState(data)
+	buffer := new(bytes.Buffer)
+	encoder := labgob.NewEncoder(buffer)
+	PrintLock("=================================[Server%d] Persist Lock=================================\n", rf.me)
+	rf.mu.Lock()
+	err := encoder.Encode(PersistentState{rf.currentTerm, rf.voteFor, rf.logs})
+	PrintLock("=================================[Server%d] Persist Unlock=================================\n", rf.me)
+	rf.mu.Unlock()
+	if err != nil {
+		log.Fatal("encode error:", err)
+	}
+	data := buffer.Bytes()
+	rf.persister.SaveRaftState(data)
 }
 
 //
@@ -149,6 +170,34 @@ func (rf *Raft) readPersist(data []byte) {
 	//   rf.xxx = xxx
 	//   rf.yyy = yyy
 	// }
+	buffer := bytes.NewBuffer(data)
+	decoder := labgob.NewDecoder(buffer)
+	var ps PersistentState
+	err := decoder.Decode(&ps)
+	if err != nil {
+		log.Fatal("decode error:", err)
+	}
+
+	PrintLock("=================================[Server%d] readPersist Lock=================================\n", rf.me)
+	rf.mu.Lock()
+
+	// persistent state on all servers
+	rf.currentTerm = ps.CurrentTerm
+	rf.voteFor = ps.VoteFor
+	rf.logs = ps.Logs
+
+	// volatile state on all servers
+	rf.commitIndex = 0 // initialized to 0, increases monotonically
+	rf.lastApplied = 0 // initialized to 0, increases monotonically
+
+	// volatile state on leaders (must be reinitialized after election)
+	rf.nextIndex = make([]int, len(rf.peers)) // don't need to initialize now since I'm not a leader on first boot
+	for idx, _ := range rf.nextIndex {
+		rf.nextIndex[idx] = 1 // log starts with 1, so the nextIndex should be 1 (every raft peer has the same log[0]!)
+	}
+	rf.matchIndex = make([]int, len(rf.peers)) // don't need to initialize now since I'm not a leader on first boot
+	PrintLock("=================================[Server%d] readPersist Unlock=================================\n", rf.me)
+	rf.mu.Unlock()
 }
 
 //
@@ -261,6 +310,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 func (rf *Raft) MainRoutine() {
 	for {
 		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
+			stateChange <- 0 // awaken the saveState function to let it know it's time to quit
 			return
 		}
 		rf.mu.Lock()
