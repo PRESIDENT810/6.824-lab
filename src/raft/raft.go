@@ -310,3 +310,31 @@ func (rf *Raft) MainRoutine() {
 		}
 	}
 }
+
+//
+// find the last index of the given term in a raft instance's log
+// don't use lock here or everything will be fucked up
+//
+func (rf *Raft) findLastIndex(term int) int {
+	for i := len(rf.logs) - 1; i >= 0; i-- {
+		if rf.logs[i].Term == term {
+			return i
+		}
+	}
+	panic("findLastIndex fucked up!!!")
+	return -1 // if we return -1, then this is really fucked up
+}
+
+//
+// find the first index of the given term in a raft instance's log
+// don't use lock here or everything will be fucked up
+//
+func (rf *Raft) findFirstIndex(term int) int {
+	for i := 0; i < len(rf.logs); i++ {
+		if rf.logs[i].Term == term {
+			return i
+		}
+	}
+	panic("findFirstIndex fucked up!!!")
+	return -1 // if we return -1, then this is really fucked up
+}

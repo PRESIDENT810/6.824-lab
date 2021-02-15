@@ -31,8 +31,8 @@ func (rf *Raft) SendHeartbeats() {
 		entries := make([]Log, 0)                 // heartbeat should carry no log, if not match, resending will carry logs
 		rf.mu.Unlock()                            // unlock raft when prevLogIndex are prepared
 		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
-		reply := AppendEntriesReply{-1, false}    // if you see -1 in reply, then the receiver never receives the RPC
-		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
+		reply := AppendEntriesReply{-1, false, -1, -1} // if you see -1 in reply, then the receiver never receives the RPC
+		go rf.SendAppendEntries(idx, args, reply)      // pass a copy instead of reference (I think args and reply may lost after it returns)
 	}
 
 	// no need to check RPC status since no need to retry for heartbeat, so it's fine if RPC failed
@@ -65,8 +65,8 @@ func (rf *Raft) RequestReplication(commandIndex int) {
 		prevLogTerm := rf.logs[prevLogIndex].Term // term of prevLogIndex entry
 		rf.mu.Unlock()                            // unlock raft when prevLogIndex are prepared
 		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
-		reply := AppendEntriesReply{-1, false}    // if you see -1 in reply, then the receiver never receives the RPC
-		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
+		reply := AppendEntriesReply{-1, false, -1, -1} // if you see -1 in reply, then the receiver never receives the RPC
+		go rf.SendAppendEntries(idx, args, reply)      // pass a copy instead of reference (I think args and reply may lost after it returns)
 	}
 }
 
@@ -107,9 +107,9 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		rf.matchIndex[server] = args.PrevLogIndex + len(args.Entries) // prevLog matches, and since success, entries just append also matches
 		rf.nextIndex[server] = rf.matchIndex[server] + 1              // increment nextIndex by the number of entries just append
 	} else { // this follower didn't catch up with my logs
-		// this is where we fucked up
 		if rf.nextIndex[server]-1 == args.PrevLogIndex { // no one else has decremented nextIndex
-			rf.nextIndex[server] = rf.nextIndex[server] - 1 // then I will decrement nextIndex
+			rf.nextIndex[server] = rf.findNextIndex(&args, &reply, server) // find what value of nextIndex I should set
+			//rf.nextIndex[server] = rf.nextIndex[server] - 1 // then I will decrement nextIndex
 		}
 	}
 
@@ -123,8 +123,8 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		prevLogIndex := rf.nextIndex[server] - 1
 		prevLogTerm := rf.logs[prevLogIndex].Term
 		args = AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
-		reply = AppendEntriesReply{-1, false}        // if you see -1 in reply, then the receiver never receives the RPC
-		go rf.SendAppendEntries(server, args, reply) // resend AppendEntries RPC
+		reply = AppendEntriesReply{-1, false, -1, -1} // if you see -1 in reply, then the receiver never receives the RPC
+		go rf.SendAppendEntries(server, args, reply)  // resend AppendEntries RPC
 	}
 	// TODO: why the fuck does this function can have reply {term: -1, success: false} ???
 }
@@ -223,4 +223,30 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 			}
 		}
 	}
+}
+
+//
+// this function find the appropriate nextIndex a raft instance should set
+// according to AppendEntries RPC's reply
+// Note: if rf.nextIndex[server]-1 == args.PrevLogIndex is not satisfied, which means in other RPCs nextIndex is already reset
+// then this function should not be called because someone else already adjusted the value of nextIndex
+//
+func (rf *Raft) findNextIndex(args *AppendEntriesArgs, reply *AppendEntriesReply, server int) int {
+	// case 1: he doesn't even have a entry at this index, so I should retry at his last entry's index
+	if reply.ConflictTerm == -2 {
+		return reply.TryNextIndex
+	}
+
+	// case 2: his term at prevLogIndex is newer, so I should retry at the index he gave me
+	if reply.ConflictTerm > args.PrevLogTerm {
+		return reply.TryNextIndex
+	}
+
+	// case 3: my term at prevLogIndex is newer, so I should retry at the index of my last entry with the term he gave me
+	if reply.ConflictTerm < args.PrevLogTerm {
+		return rf.findLastIndex(reply.ConflictTerm)
+	}
+
+	// not sure when should we have this case, but if things fucked up, comment 3 cases above and use this as returned value
+	return rf.nextIndex[server] - 1
 }

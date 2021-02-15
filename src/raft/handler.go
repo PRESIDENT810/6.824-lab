@@ -40,6 +40,10 @@ type AppendEntriesArgs struct {
 type AppendEntriesReply struct {
 	Term    int  // currentTerm, for leader to update itself
 	Success bool // true if follower contained entry matching prevLogIndex and prevLogTerm
+
+	// these two attributes are used for optimization when rejecting AppendEntries RPC
+	ConflictTerm int // the term of the conflicting entry
+	TryNextIndex int // the index of log entry you should try in the next AppendEntries RPC
 }
 
 //
@@ -68,10 +72,32 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	prevLogIndex := args.PrevLogIndex // use a local variable to store prevLogIndex for efficiency
 
-	if len(rf.logs) <= prevLogIndex || rf.logs[prevLogIndex].Term != args.PrevLogTerm { // our log mismatch (either I don't have this log or have a log with different term)
-		// TODO: when rejecting AppendEntries RPC, include the term of the conflicting entry and the first index for that term to improve effiency
+	// case 1: I don't even have a entry at this index, so you should retry at my last entry's index
+	if len(rf.logs) <= prevLogIndex { // I don't have this log for this index, you have to retry with my last index
+		reply.Term = rf.currentTerm           // same as sender's term (if newer, I returned false already; if older, I updated already)
+		reply.Success = false                 // reply false if log doesn't contain an entry at prevLogIndex whose term matches prevLogTerm
+		reply.ConflictTerm = -2               // -2 means I don't have this entry index
+		reply.TryNextIndex = len(rf.logs) - 1 // you have to retry with my last existing log
+		return
+	}
+
+	myTerm := rf.logs[prevLogIndex].Term // my log entry's term at caller's prevLogIndex
+
+	// case 2: you don't have entries with myTerm, so you should retry at the index of my last entry with term=myTerm-1
+	if myTerm > args.PrevLogTerm { // my log's term is bigger, so you have to retry with the index of my last term
+		reply.Term = rf.currentTerm                        // same as sender's term (if newer, I returned false already; if older, I updated already)
+		reply.Success = false                              // reply false if log doesn't contain an entry at prevLogIndex whose term matches prevLogTerm
+		reply.ConflictTerm = myTerm                        // this is the term of my conflicting log entry
+		reply.TryNextIndex = rf.findFirstIndex(myTerm) - 1 // find the index for the first log entry with term smaller than myTerm
+		return
+	}
+
+	// case 3: I don't have entries with you prevLogTerm, so you should retry at the index of your last entry with term=prevLogTerm-1
+	if myTerm < args.PrevLogTerm { // our log mismatch (either I don't have this log or have a log with different term)
 		reply.Term = rf.currentTerm // same as sender's term (if newer, I returned false already; if older, I updated already)
 		reply.Success = false       // reply false if log doesn't contain an entry at prevLogIndex whose term matches prevLogTerm
+		reply.ConflictTerm = myTerm // this is the term of my conflicting log entry
+		reply.TryNextIndex = -2     // you have to find this index yourself, I cannot help you
 		return
 	}
 
