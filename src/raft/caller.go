@@ -28,7 +28,7 @@ func (rf *Raft) SendHeartbeats() {
 		rf.mu.Lock()                              // lock raft instance to prepare the prevLogIndex
 		prevLogIndex := rf.nextIndex[idx] - 1     // index of log entry immediately preceding new ones (nextIndex-1)
 		prevLogTerm := rf.logs[prevLogIndex].Term // term of prevLogIndex entry
-		entries := make([]Log, 0)                 // TODO: heartbeat's entry should be determined by nextIndex?
+		entries := make([]Log, 0)                 // heartbeat should carry no log, if not match, resending will carry logs
 		rf.mu.Unlock()                            // unlock raft when prevLogIndex are prepared
 		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
 		reply := AppendEntriesReply{-1, false}    // if you see -1 in reply, then the receiver never receives the RPC
@@ -177,7 +177,6 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 		Printf("RequestVote from LEADER %d to FOLLOWER %d RPC failed\n", rf.me, server)
 		return
 	}
-	// TODO: do we really have to discard reply with a different term that mismatches args' term?
 
 	PrintLock("=================================[Server%d] SendRequestVote Lock=================================\n", rf.me)
 	rf.mu.Lock()         // add mutex lock before you access attributes of raft instance

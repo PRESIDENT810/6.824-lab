@@ -69,6 +69,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	prevLogIndex := args.PrevLogIndex // use a local variable to store prevLogIndex for efficiency
 
 	if len(rf.logs) <= prevLogIndex || rf.logs[prevLogIndex].Term != args.PrevLogTerm { // our log mismatch (either I don't have this log or have a log with different term)
+		// TODO: when rejecting AppendEntries RPC, include the term of the conflicting entry and the first index for that term to improve effiency
 		reply.Term = rf.currentTerm // same as sender's term (if newer, I returned false already; if older, I updated already)
 		reply.Success = false       // reply false if log doesn't contain an entry at prevLogIndex whose term matches prevLogTerm
 		return
