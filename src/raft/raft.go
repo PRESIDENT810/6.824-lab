@@ -373,7 +373,15 @@ func (rf *Raft) MainRoutine() {
 //
 func (rf *Raft) findLastIndex(term int) int {
 	for i := len(rf.logs) - 1; i >= 0; i-- {
-		if rf.logs[i].Term == term {
+		// sometimes I don't have log in this term, for example:
+		// INDEX:    0 1 2 3 4 5 6 7
+		// =========================
+		// LEADER:   1 1 1 2 2 4 4 4
+		// FOLLOWER: 1 1 1 3 3 3
+		// with prevLogIndex=5, so he don't have log entry with term 4, and he replies me with term 3,
+		// which means our log can only match with term at most 3
+		// but I don't have log entries with term 3, so I have to find a entry with term smaller than or equal to 3
+		if rf.logs[i].Term <= term {
 			return i
 		}
 	}

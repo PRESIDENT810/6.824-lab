@@ -246,12 +246,10 @@ func (rf *Raft) findNextIndex(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return reply.TryNextIndex
 	}
 
-	// case 3: my term at prevLogIndex is newer, so I should retry at the index of my last entry with the term he gave me
+	// case 3: my term at prevLogIndex is newer, so I should retry at the index of my last entry with the term he gave me (or the term "just" smaller than this one)
 	if reply.ConflictTerm < args.PrevLogTerm {
 		lastIndex := rf.findLastIndex(reply.ConflictTerm)
-		if lastIndex != -1 {
-			return lastIndex
-		}
+		return lastIndex
 	}
 
 	// not sure when should we have this case, but if things fucked up, comment 3 cases above and use this as returned value
