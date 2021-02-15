@@ -21,6 +21,13 @@ func PrintLock(format string, a ...interface{}) {
 	}
 }
 
+// wrapper of fmt.Printf, if showPersist is false, then don't print log about persister
+func PrintPersist(format string, a ...interface{}) {
+	if showPersist {
+		fmt.Printf(format, a...)
+	}
+}
+
 //
 // log server info
 //
@@ -84,4 +91,22 @@ func (rf *Raft) LogRequestVoteSend(sender, receiver int, args *RequestVoteArgs, 
 	Printf("[server%d] sends RequestVote RPC to %d\nArguments:\nterm: %d, candidateId: %d, lastLogIndex: %d, lastLogTerm: %d\nReply:\nterm: %d, voteGranted: %t\n\n\n",
 		sender, receiver, args.Term, args.CandidateId, args.LastLogIndex, args.LastLogTerm, reply.Term, reply.VoteGranted)
 	rf.LogServerStates()
+}
+
+//
+// log ReadPersist
+//
+func (rf *Raft) LogReadPersistState(ps *PersistentState) {
+	logMutex.Lock()
+	defer logMutex.Unlock()
+	PrintPersist("[server%d] calls ReadPersist from persister\ncurrentTerm: %d, voteFor: %d, logs: %v\n\n\n", rf.me, ps.CurrentTerm, ps.VoteFor, ps.Logs)
+}
+
+//
+// log Persist
+//
+func (rf *Raft) LogPersistState(ps *PersistentState) {
+	logMutex.Lock()
+	defer logMutex.Unlock()
+	PrintPersist("[server%d] calls Persist to persister\ncurrentTerm: %d, voteFor: %d, logs: %v\n\n\n", rf.me, ps.CurrentTerm, ps.VoteFor, ps.Logs)
 }

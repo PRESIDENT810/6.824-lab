@@ -59,15 +59,17 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if args.Term < rf.currentTerm { // my term is newer
 		reply.Term = rf.currentTerm // return my current term to update the sender
 		reply.Success = false       // reply false if term < currentTerm
+		go rf.persist()             // currentTerm is changed, so I need to save my states
 		return
 	}
 
-	rf.ResetTimer() // reset timer upon AppendEntries (but if the term in arguments is outdated, you should not reset your timer!)
+	go rf.ResetTimer() // reset timer upon AppendEntries (but if the term in arguments is outdated, you should not reset your timer!)
 
 	if args.Term > rf.currentTerm { // my term is too old
 		rf.currentTerm = args.Term // update my term first
 		rf.voteFor = -1            // in this new term, I didn't vote for anyone
 		rf.role = FOLLOWER         // convert myself to a follower, no matter what is my old role
+		go rf.persist()            // currentTerm and voteFor are changed, so I need to save my states
 	}
 
 	prevLogIndex := args.PrevLogIndex // use a local variable to store prevLogIndex for efficiency
@@ -115,6 +117,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		}
 	}
 
+	go rf.persist() // my logs are changed, so I need to save my states
+
 	if args.LeaderCommit > rf.commitIndex { // rule 5 for AppendEntries RPC in figure 2
 		rf.commitIndex = min(args.LeaderCommit, prevLogIndex+len(args.Entries))
 	}
@@ -144,6 +148,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.currentTerm = args.Term // update my term first
 		rf.voteFor = -1            // in this new term, I didn't vote for anyone
 		rf.role = FOLLOWER         // convert myself to a follower, no matter what is my old role
+		go rf.persist()            // currentTerm and voteFor are changed, so I need to save my states
 		// remember when receiving RequestVote RPC you shouldn't reset the timer!!
 	}
 
@@ -158,8 +163,11 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if (!voteSomeoneElse) && upToDate { // either I voted for nobody, or I voted for you already, and you log is more up-to-date than mine
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = true
-		rf.ResetTimer()
 		rf.voteFor = args.CandidateId // change my voteFor to the candidate
+		if rf.voteFor != args.CandidateId {
+			go rf.persist() // voteFor are changed, so I need to save my states
+		}
+		go rf.ResetTimer()
 		return
 	}
 

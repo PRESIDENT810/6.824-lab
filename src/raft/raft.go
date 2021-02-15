@@ -63,8 +63,9 @@ const (
 
 // whether show corresponding log
 const (
-	showLog  = false
-	showLock = false
+	showLog     = false
+	showLock    = false
+	showPersist = false
 )
 
 // if raft instance is supposed to save its state, pass a integer to this channel
@@ -140,9 +141,11 @@ func (rf *Raft) persist() {
 	encoder := labgob.NewEncoder(buffer)
 	PrintLock("=================================[Server%d] Persist Lock=================================\n", rf.me)
 	rf.mu.Lock()
-	err := encoder.Encode(PersistentState{rf.currentTerm, rf.voteFor, rf.logs})
+	ps := PersistentState{rf.currentTerm, rf.voteFor, rf.logs}
 	PrintLock("=================================[Server%d] Persist Unlock=================================\n", rf.me)
 	rf.mu.Unlock()
+	rf.LogPersistState(&ps)
+	err := encoder.Encode(ps)
 	if err != nil {
 		log.Fatal("encode error:", err)
 	}
@@ -174,6 +177,7 @@ func (rf *Raft) readPersist(data []byte) {
 	decoder := labgob.NewDecoder(buffer)
 	var ps PersistentState
 	err := decoder.Decode(&ps)
+	rf.LogReadPersistState(&ps)
 	if err != nil {
 		log.Fatal("decode error:", err)
 	}
@@ -225,6 +229,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 
 	if isLeader {
 		rf.logs = append(rf.logs, Log{rf.currentTerm, command}) // log to replicate to the cluster
+		go rf.persist()                                         // logs are changed, so I need to save my states
 		go rf.RequestReplication(index)
 	}
 
@@ -338,6 +343,7 @@ func (rf *Raft) MainRoutine() {
 				rf.currentTerm++           // increment my current term
 				rf.voteFor = rf.me         // vote for myself
 				rf.electionExpired = false // reset electionExpired to let timer decided when to re-elect
+				go rf.persist()            // currentTerm and voteFor are changed, so I need to save my states
 				go rf.RunElection()        // if electionExpired is false, it means you elect too fast, wait for the timeout
 			}
 			rf.mu.Unlock()

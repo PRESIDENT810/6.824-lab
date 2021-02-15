@@ -98,8 +98,10 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 
 	if reply.Term > rf.currentTerm { // I should no longer be the leader since my term is too old
 		rf.currentTerm = reply.Term // set currentTerm = T
+		rf.voteFor = -1             // reset voteFor
 		rf.role = FOLLOWER          // convert to follower
-		rf.ResetTimer()
+		go rf.persist()             // currentTerm and voteFor are changed, so I need to save my states
+		go rf.ResetTimer()
 		return
 	}
 
@@ -198,8 +200,10 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 
 	if reply.Term > rf.currentTerm { // someone's term is bigger than me, so I'm not the newest one
 		rf.currentTerm = reply.Term // update my current term
+		rf.voteFor = -1             // reset my voteFor
 		rf.role = FOLLOWER          // convert to follower
-		rf.ResetTimer()
+		go rf.persist()             // currentTerm and voteFor are changed, so I need to save my states
+		go rf.ResetTimer()
 		return
 	}
 
