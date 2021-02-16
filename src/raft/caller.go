@@ -31,8 +31,8 @@ func (rf *Raft) SendHeartbeats() {
 		entries := make([]Log, 0)                 // heartbeat should carry no log, if not match, resending will carry logs
 		rf.mu.Unlock()                            // unlock raft when prevLogIndex are prepared
 		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
-		reply := AppendEntriesReply{-1, false, -1, -1} // if you see -1 in reply, then the receiver never receives the RPC
-		go rf.SendAppendEntries(idx, args, reply)      // pass a copy instead of reference (I think args and reply may lost after it returns)
+		reply := AppendEntriesReply{}
+		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
 	}
 
 	// no need to check RPC status since no need to retry for heartbeat, so it's fine if RPC failed
@@ -65,8 +65,8 @@ func (rf *Raft) RequestReplication(commandIndex int) {
 		prevLogTerm := rf.logs[prevLogIndex].Term // term of prevLogIndex entry
 		rf.mu.Unlock()                            // unlock raft when prevLogIndex are prepared
 		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
-		reply := AppendEntriesReply{-1, false, -1, -1} // if you see -1 in reply, then the receiver never receives the RPC
-		go rf.SendAppendEntries(idx, args, reply)      // pass a copy instead of reference (I think args and reply may lost after it returns)
+		reply := AppendEntriesReply{}
+		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
 	}
 }
 
@@ -106,8 +106,10 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 	}
 
 	if reply.Success { // this follower's log now is matched to mine, so update the nextIndex and matchIndex
-		rf.matchIndex[server] = args.PrevLogIndex + len(args.Entries) // prevLog matches, and since success, entries just append also matches
-		rf.nextIndex[server] = rf.matchIndex[server] + 1              // increment nextIndex by the number of entries just append
+		if rf.nextIndex[server]-1 == args.PrevLogIndex { // no one else has incremented nextIndex
+			rf.matchIndex[server] = args.PrevLogIndex + len(args.Entries) // prevLog matches, and since success, entries just append also matches
+			rf.nextIndex[server] = rf.matchIndex[server] + 1              // increment nextIndex by the number of entries just append
+		}
 	} else { // this follower didn't catch up with my logs
 		if rf.nextIndex[server]-1 == args.PrevLogIndex { // no one else has decremented nextIndex
 			rf.nextIndex[server] = rf.findNextIndex(&args, &reply, server) // find what value of nextIndex I should set
@@ -161,7 +163,7 @@ func (rf *Raft) RunElection() {
 			continue // I don't have to vote for myself, I did this in my MainRoutine function
 		}
 		args := RequestVoteArgs{term, candidateId, lastLogIndex, lastLogTerm}
-		reply := RequestVoteReply{-1, false}                        // if you see -1 in reply, then the receiver never receives the RPC
+		reply := RequestVoteReply{}
 		go rf.SendRequestVote(idx, args, reply, &upVote, &downVote) // send RPC to each server
 	}
 }
@@ -259,5 +261,6 @@ func (rf *Raft) findNextIndex(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if res == -1 { // not sure when should we have this case, but if things fucked up, comment 3 cases above and use this as returned value
 		return rf.nextIndex[server] - 1 // I don't know when the result will be -1, but if it is, then just return nextIndex-1
 	}
+
 	return res
 }
