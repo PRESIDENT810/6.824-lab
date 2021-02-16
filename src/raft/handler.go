@@ -103,15 +103,19 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return
 	}
 
+	lastNewEntry := prevLogIndex
+
 	// if an existing entry conflicts with a new one (args.entries), delete the existing entry and all that follow it
 	// append any new entries not already in the log
 	for i, _ := range args.Entries {
 		insertIndex := i + prevLogIndex + 1 // i+prevLogIndex <= last index of log (if len(log) <= prevLogIndex, it returns already)
 		if insertIndex == len(rf.logs) {    // no log at insertIndex, so we append a new entry
 			rf.logs = append(rf.logs, args.Entries[i])
+			lastNewEntry++
 		} else if rf.logs[insertIndex] != args.Entries[i] { // log at insertIndex doesn't match our entry
 			rf.logs = rf.logs[:insertIndex]            // delete the existing entry and all that follow it
 			rf.logs = append(rf.logs, args.Entries[i]) // add current log
+			lastNewEntry++
 		} else { // log at insertIndex matches our entry
 			continue
 		}
@@ -119,8 +123,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	go rf.persist() // my logs are changed, so I need to save my states
 
+	// TODO: index of last new entry!!
 	if args.LeaderCommit > rf.commitIndex { // rule 5 for AppendEntries RPC in figure 2
-		rf.commitIndex = min(args.LeaderCommit, prevLogIndex+len(args.Entries))
+		rf.commitIndex = min(args.LeaderCommit, lastNewEntry)
 	}
 	reply.Term = rf.currentTerm
 	reply.Success = true
