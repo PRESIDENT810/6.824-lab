@@ -123,7 +123,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	go rf.persist() // my logs are changed, so I need to save my states
 
-	// TODO: index of last new entry!!
 	if args.LeaderCommit > rf.commitIndex { // rule 5 for AppendEntries RPC in figure 2
 		rf.commitIndex = min(args.LeaderCommit, lastNewEntry)
 	}

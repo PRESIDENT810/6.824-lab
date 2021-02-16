@@ -74,6 +74,13 @@ func (rf *Raft) RequestReplication(commandIndex int) {
 // send AppendEntries RPC to a single server and handle the reply
 //
 func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
+	rf.mu.Lock()
+	role := rf.role
+	rf.mu.Unlock()
+	if role != LEADER {
+		return
+	}
+
 	Printf("[Server%d] enters SendAppendEntries with prevLogIndex %d in term %d\n", rf.me, args.PrevLogIndex, args.Term)
 	defer Printf("[Server%d] quits SendAppendEntries with prevLogIndex %d in term %d\n", rf.me, args.PrevLogIndex, args.Term)
 
@@ -127,10 +134,9 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		prevLogIndex := rf.nextIndex[server] - 1
 		prevLogTerm := rf.logs[prevLogIndex].Term
 		args = AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
-		reply = AppendEntriesReply{-1, false, -1, -1} // if you see -1 in reply, then the receiver never receives the RPC
-		go rf.SendAppendEntries(server, args, reply)  // resend AppendEntries RPC
+		reply = AppendEntriesReply{}
+		go rf.SendAppendEntries(server, args, reply) // resend AppendEntries RPC
 	}
-	// TODO: why the fuck does this function can have reply {term: -1, success: false} ???
 }
 
 //
@@ -252,10 +258,7 @@ func (rf *Raft) findNextIndex(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	// case 3: my term at prevLogIndex is newer, so I should retry at the index of my last entry with the term he gave me (or the term "just" smaller than this one)
 	if reply.ConflictTerm < args.PrevLogTerm {
-		lastIndex := rf.findLastIndex(reply.ConflictTerm)
-		if lastIndex != -1 {
-			res = lastIndex
-		}
+		res = rf.findLastIndex(reply.ConflictTerm)
 	}
 
 	if res == -1 { // not sure when should we have this case, but if things fucked up, comment 3 cases above and use this as returned value

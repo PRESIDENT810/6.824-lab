@@ -28,10 +28,10 @@ func (rf *Raft) persist() {
 	PrintLock("=================================[Server%d] Persist Lock=================================\n", rf.me)
 	rf.mu.Lock()
 	ps := PersistentState{rf.currentTerm, rf.voteFor, rf.logs}
+	err := encoder.Encode(ps)
+	rf.LogPersistState(&ps)
 	PrintLock("=================================[Server%d] Persist Unlock=================================\n", rf.me)
 	rf.mu.Unlock()
-	rf.LogPersistState(&ps)
-	err := encoder.Encode(ps)
 	if err != nil {
 		log.Fatal("encode error:", err)
 	}
