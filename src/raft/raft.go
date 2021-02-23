@@ -57,7 +57,7 @@ const (
 
 // whether show corresponding log
 const (
-	showLog     = true
+	showLog     = false
 	showLock    = false
 	showPersist = false
 )
@@ -235,9 +235,6 @@ func (rf *Raft) MainRoutine() {
 		role := rf.role
 		PrintLock("=================================[Server%d] MainRoutine Unlock=================================\n", rf.me)
 		rf.mu.Unlock()
-		logMutex.Lock()
-		rf.LogServerStates()
-		logMutex.Unlock()
 		switch role {
 		case LEADER: // if you are a leader, then you should send heartbeats
 			//Printf("\n=====================================================================================================\n")
@@ -267,16 +264,12 @@ func (rf *Raft) MainRoutine() {
 			//Printf("=====================================================================================================\n")
 			rf.mu.Lock()
 			electionExpired := rf.electionExpired
-			rf.mu.Unlock()
 			if electionExpired { // but first check election timeout
 				rf.ResetTimer()     // restart election timer if I am starting an election
 				rf.role = CANDIDATE // if it expires, then convert to candidate and proceed
-				break
 			}
+			rf.mu.Unlock()
 			time.Sleep(50 * time.Millisecond) // after sleep a while, and check if my timeout expires again
-			break                             // if no timeout then it is fine, RPC call is handled in its handler so nothing to do here
 		}
 	}
 }
-
-// TODO: fix race condition

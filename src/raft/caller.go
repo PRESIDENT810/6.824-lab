@@ -13,10 +13,13 @@ import (
 // and if the role changes, MainRoutine will know in the switch statement in the next iteration
 //
 func (rf *Raft) SendHeartbeats() {
-	Printf("[server%d] enters SendHeartbeats\n", rf.me)
-	defer Printf("[Server%d] quits SendHeartbeats", rf.me)
+	rf.mu.Lock() // lock raft instance to prepare the RPC arguments
 
-	rf.mu.Lock()                   // lock raft instance to prepare the RPC arguments
+	logMutex.Lock()
+	Printf("[server%d] enters SendHeartbeats\n", rf.me)
+	rf.LogServerStates()
+	logMutex.Unlock()
+
 	term := rf.currentTerm         // my term
 	leaderId := rf.me              // current leader, which is me
 	leaderCommit := rf.commitIndex // last log I committed
@@ -48,10 +51,13 @@ func (rf *Raft) SendHeartbeats() {
 // then we commit these logs on the leader side, and followers will commit these in consequent AppendEntries RPCs
 //
 func (rf *Raft) RequestReplication(commandIndex int) {
-	Printf("[Server%d] enters RequestReplication", rf.me)
-	defer Printf("[Server%d] quits RequestReplication", rf.me)
+	rf.mu.Lock() // lock raft instance to prepare the RPC arguments
 
-	rf.mu.Lock()                   // lock raft instance to prepare the RPC arguments
+	logMutex.Lock()
+	Printf("[Server%d] enters RequestReplication", rf.me)
+	rf.LogServerStates()
+	logMutex.Unlock()
+
 	term := rf.currentTerm         // my term
 	leaderId := rf.me              // current leader, which is me
 	leaderCommit := rf.commitIndex // last log I committed
@@ -63,11 +69,13 @@ func (rf *Raft) RequestReplication(commandIndex int) {
 		}
 		rf.mu.Lock()                              // lock raft instance to prepare the prevLogIndex
 		entries := rf.logs[rf.nextIndex[idx]:]    // nextIndex's possible maximal value is len(rf.logs), since we just append a new log, it won't exceed bound
+		entriesCopy := make([]Log, len(entries))  // initialize an empty slice
+		copy(entriesCopy, entries)                // make a copy of log to avoid data race condition
 		prevLogIndex := rf.nextIndex[idx] - 1     // index of log entry immediately preceding new ones (nextIndex-1)
 		prevLogTerm := rf.logs[prevLogIndex].Term // term of prevLogIndex entry
 		rf.mu.Unlock()                            // unlock raft when prevLogIndex are prepared
 		ID := atomic.AddInt64(&RPCIndex, 1)
-		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit, ID}
+		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entriesCopy, leaderCommit, ID}
 		reply := AppendEntriesReply{}
 		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
 	}
@@ -77,15 +85,12 @@ func (rf *Raft) RequestReplication(commandIndex int) {
 // send AppendEntries RPC to a single server and handle the reply
 //
 func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
-	//rf.mu.Lock()
-	//role := rf.role
-	//rf.mu.Unlock()
-	//if role != LEADER {
-	//	return
-	//}
-
+	rf.mu.Lock()
+	logMutex.Lock()
 	Printf("[Server%d] enters SendAppendEntries with prevLogIndex %d in term %d\n", rf.me, args.PrevLogIndex, args.Term)
-	defer Printf("[Server%d] quits SendAppendEntries with prevLogIndex %d in term %d\n", rf.me, args.PrevLogIndex, args.Term)
+	rf.LogServerStates()
+	logMutex.Unlock()
+	rf.mu.Unlock()
 
 	success := rf.peers[server].Call("Raft.AppendEntries", &args, &reply)
 
@@ -111,7 +116,7 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		rf.voteFor = -1             // reset voteFor
 		rf.role = FOLLOWER          // convert to follower
 		go rf.persist()             // currentTerm and voteFor are changed, so I need to save my states
-		go rf.ResetTimer()
+		rf.ResetTimer()
 		return
 	}
 
@@ -132,7 +137,9 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		term := rf.currentTerm // my term
 		leaderId := rf.me      // current leader, which is me
 		nextIndex := rf.nextIndex[server]
-		entries := rf.logs[nextIndex:] // send the log entry with nextIndex, since follower doesn't match, nextIndex won't exceed len(rf.log)
+		entries := rf.logs[nextIndex:]           // send the log entry with nextIndex, since follower doesn't match, nextIndex won't exceed len(rf.log)
+		entriesCopy := make([]Log, len(entries)) // initialize an empty slice
+		copy(entriesCopy, entries)               // make a copy of log to avoid data race condition
 		leaderCommit := rf.commitIndex
 		prevLogIndex := rf.nextIndex[server] - 1
 		prevLogTerm := rf.logs[prevLogIndex].Term
@@ -153,18 +160,19 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 // This function quits only when I converts to follower or leader, or my election time expires so I should re-elect
 //
 func (rf *Raft) RunElection() {
-	Printf("[Server%d] enters RunElection\n", rf.me)
-	defer Printf("[Server%d] quits RunElection\n", rf.me)
+	rf.mu.Lock() // lock raft instance to prepare the RPC arguments
 
-	PrintLock("=================================[Server%d] RunElection Lock=================================\n", rf.me)
-	rf.mu.Lock()                              // lock raft instance to prepare the RPC arguments
+	logMutex.Lock()
+	Printf("[Server%d] enters RunElection\n", rf.me)
+	rf.LogServerStates()
+	logMutex.Unlock()
+
 	rf.ResetTimer()                           // reset the election timer because when starting an election
 	term := rf.currentTerm                    // my term
 	candidateId := rf.me                      // candidate id, which is me!
 	lastLogIndex := len(rf.logs) - 1          // index of my last log entry
 	lastLogTerm := rf.logs[lastLogIndex].Term // term of my last log entry
-	PrintLock("=================================[Server%d] RunElection Unlock=================================\n", rf.me)
-	rf.mu.Unlock() // unlock raft when RPC arguments are prepared
+	rf.mu.Unlock()                            // unlock raft when RPC arguments are prepared
 
 	//electionDone := make(chan int, 1)
 	upVote := 1   // how many servers agree to vote for me (initialized to 1 since I vote for myself!)
@@ -186,8 +194,12 @@ func (rf *Raft) RunElection() {
 // also signal the voteDone cond var
 //
 func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestVoteReply, upVote *int, downVote *int) {
+	rf.mu.Lock()
+	logMutex.Lock()
 	Printf("[Server%d] enters SendRequestVote in term %d\n", rf.me, args.Term)
-	defer Printf("[Server%d] quits SendRequestVote in term %d\n", rf.me, args.Term)
+	rf.LogServerStates()
+	logMutex.Unlock()
+	rf.mu.Unlock()
 
 	success := rf.peers[server].Call("Raft.RequestVote", &args, &reply)
 	if !success { // RPC failed
@@ -218,7 +230,7 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 		rf.voteFor = -1             // reset my voteFor
 		rf.role = FOLLOWER          // convert to follower
 		go rf.persist()             // currentTerm and voteFor are changed, so I need to save my states
-		go rf.ResetTimer()
+		rf.ResetTimer()
 		return
 	}
 

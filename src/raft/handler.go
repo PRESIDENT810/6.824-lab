@@ -65,7 +65,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return
 	}
 
-	go rf.ResetTimer() // reset timer upon AppendEntries (but if the term in arguments is outdated, you should not reset your timer!)
+	rf.ResetTimer() // reset timer upon AppendEntries (but if the term in arguments is outdated, you should not reset your timer!)
 
 	if args.Term > rf.currentTerm { // my term is too old
 		rf.currentTerm = args.Term // update my term first
@@ -173,7 +173,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		if rf.voteFor != args.CandidateId {
 			go rf.persist() // voteFor are changed, so I need to save my states
 		}
-		go rf.ResetTimer()
+		rf.ResetTimer()
 		return
 	}
 
