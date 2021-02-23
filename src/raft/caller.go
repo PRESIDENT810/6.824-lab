@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"sync/atomic"
 	"time"
 )
 
@@ -30,7 +31,8 @@ func (rf *Raft) SendHeartbeats() {
 		prevLogTerm := rf.logs[prevLogIndex].Term // term of prevLogIndex entry
 		entries := make([]Log, 0)                 // heartbeat should carry no log, if not match, resending will carry logs
 		rf.mu.Unlock()                            // unlock raft when prevLogIndex are prepared
-		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
+		ID := atomic.AddInt64(&RPCIndex, 1)
+		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit, ID}
 		reply := AppendEntriesReply{}
 		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
 	}
@@ -64,7 +66,8 @@ func (rf *Raft) RequestReplication(commandIndex int) {
 		prevLogIndex := rf.nextIndex[idx] - 1     // index of log entry immediately preceding new ones (nextIndex-1)
 		prevLogTerm := rf.logs[prevLogIndex].Term // term of prevLogIndex entry
 		rf.mu.Unlock()                            // unlock raft when prevLogIndex are prepared
-		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
+		ID := atomic.AddInt64(&RPCIndex, 1)
+		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit, ID}
 		reply := AppendEntriesReply{}
 		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
 	}
@@ -74,12 +77,12 @@ func (rf *Raft) RequestReplication(commandIndex int) {
 // send AppendEntries RPC to a single server and handle the reply
 //
 func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
-	rf.mu.Lock()
-	role := rf.role
-	rf.mu.Unlock()
-	if role != LEADER {
-		return
-	}
+	//rf.mu.Lock()
+	//role := rf.role
+	//rf.mu.Unlock()
+	//if role != LEADER {
+	//	return
+	//}
 
 	Printf("[Server%d] enters SendAppendEntries with prevLogIndex %d in term %d\n", rf.me, args.PrevLogIndex, args.Term)
 	defer Printf("[Server%d] quits SendAppendEntries with prevLogIndex %d in term %d\n", rf.me, args.PrevLogIndex, args.Term)
@@ -133,9 +136,12 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		leaderCommit := rf.commitIndex
 		prevLogIndex := rf.nextIndex[server] - 1
 		prevLogTerm := rf.logs[prevLogIndex].Term
-		args = AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
+		ID := atomic.AddInt64(&RPCIndex, 1)
+		args = AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit, ID}
 		reply = AppendEntriesReply{}
-		go rf.SendAppendEntries(server, args, reply) // resend AppendEntries RPC
+		if rf.role == LEADER {
+			go rf.SendAppendEntries(server, args, reply) // resend AppendEntries RPC
+		}
 	}
 }
 
@@ -168,7 +174,8 @@ func (rf *Raft) RunElection() {
 		if idx == candidateId {
 			continue // I don't have to vote for myself, I did this in my MainRoutine function
 		}
-		args := RequestVoteArgs{term, candidateId, lastLogIndex, lastLogTerm}
+		ID := atomic.AddInt64(&RPCIndex, 1)
+		args := RequestVoteArgs{term, candidateId, lastLogIndex, lastLogTerm, ID}
 		reply := RequestVoteReply{}
 		go rf.SendRequestVote(idx, args, reply, &upVote, &downVote) // send RPC to each server
 	}

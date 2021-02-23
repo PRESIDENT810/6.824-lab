@@ -55,8 +55,8 @@ func (rf *Raft) LogServerStates() {
 func (rf *Raft) LogAppendEntriesReceive(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
-	Printf("[server%d] receives AppendEntries RPC\nArguments:\nterm: %d, leaderId: %d, prevLogIndex: %d, prevLogTerm: %d, entry: %v, leaderCommit: %d\n\n\n",
-		rf.me, args.Term, args.LeaderId, args.PrevLogIndex, args.PrevLogTerm, args.Entries, args.LeaderCommit)
+	Printf("[server%d] receives [AppendEntries RPC %d]\nArguments:\nterm: %d, leaderId: %d, prevLogIndex: %d, prevLogTerm: %d, entry: %v, leaderCommit: %d\n\n\n",
+		rf.me, args.ID, args.Term, args.LeaderId, args.PrevLogIndex, args.PrevLogTerm, args.Entries, args.LeaderCommit)
 	rf.LogServerStates()
 }
 
@@ -66,8 +66,8 @@ func (rf *Raft) LogAppendEntriesReceive(args *AppendEntriesArgs, reply *AppendEn
 func (rf *Raft) LogRequestVoteReceive(args *RequestVoteArgs, reply *RequestVoteReply) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
-	Printf("[server%d] receives RequestVote RPC\nArguments:\nterm: %d, candidateId: %d, lastLogIndex: %d, lastLogTerm: %d\n\n\n",
-		rf.me, args.Term, args.CandidateId, args.LastLogIndex, args.LastLogTerm)
+	Printf("[server%d] receives [RequestVote RPC %d]\nArguments:\nterm: %d, candidateId: %d, lastLogIndex: %d, lastLogTerm: %d\n\n\n",
+		rf.me, args.ID, args.Term, args.CandidateId, args.LastLogIndex, args.LastLogTerm)
 	rf.LogServerStates()
 }
 
@@ -77,8 +77,8 @@ func (rf *Raft) LogRequestVoteReceive(args *RequestVoteArgs, reply *RequestVoteR
 func (rf *Raft) LogAppendEntriesSend(sender, receiver int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
-	Printf("[server%d] sends AppendEntries RPC to %d\nArguments:\nterm: %d, leaderId: %d, prevLogIndex: %d, prevLogTerm: %d, entry: %v, leaderCommit: %d\nReply:\nterm: %d, success: %t\n\n\n",
-		sender, receiver, args.Term, args.LeaderId, args.PrevLogIndex, args.PrevLogTerm, args.Entries, args.LeaderCommit, reply.Term, reply.Success)
+	Printf("[server%d] sends [AppendEntries RPC %d] to [server%d]\nArguments:\nterm: %d, leaderId: %d, prevLogIndex: %d, prevLogTerm: %d, entry: %v, leaderCommit: %d\nReply:\nterm: %d, success: %t\n\n\n",
+		sender, args.ID, receiver, args.Term, args.LeaderId, args.PrevLogIndex, args.PrevLogTerm, args.Entries, args.LeaderCommit, reply.Term, reply.Success)
 	rf.LogServerStates()
 }
 
@@ -88,8 +88,8 @@ func (rf *Raft) LogAppendEntriesSend(sender, receiver int, args *AppendEntriesAr
 func (rf *Raft) LogRequestVoteSend(sender, receiver int, args *RequestVoteArgs, reply *RequestVoteReply) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
-	Printf("[server%d] sends RequestVote RPC to %d\nArguments:\nterm: %d, candidateId: %d, lastLogIndex: %d, lastLogTerm: %d\nReply:\nterm: %d, voteGranted: %t\n\n\n",
-		sender, receiver, args.Term, args.CandidateId, args.LastLogIndex, args.LastLogTerm, reply.Term, reply.VoteGranted)
+	Printf("[server%d] sends [RequestVote RPC %d] to [server%d]\nArguments:\nterm: %d, candidateId: %d, lastLogIndex: %d, lastLogTerm: %d\nReply:\nterm: %d, voteGranted: %t\n\n\n",
+		sender, args.ID, receiver, args.Term, args.CandidateId, args.LastLogIndex, args.LastLogTerm, reply.Term, reply.VoteGranted)
 	rf.LogServerStates()
 }
 

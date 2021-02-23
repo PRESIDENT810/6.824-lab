@@ -73,6 +73,11 @@ func (rf *Raft) readPersist(data []byte) {
 		rf.nextIndex[idx] = 1 // log starts with 1, so the nextIndex should be 1 (every raft peer has the same log[0]!)
 	}
 	rf.matchIndex = make([]int, len(rf.peers)) // don't need to initialize now since I'm not a leader on first boot
+
+	// initialized extra attributes I added
+	rf.role = FOLLOWER // all servers should be followers when starting up
+	rf.ResetTimer()    // initialize the timer
+
 	PrintLock("=================================[Server%d] readPersist Unlock=================================\n", rf.me)
 	rf.mu.Unlock()
 }

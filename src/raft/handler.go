@@ -5,10 +5,11 @@ package raft
 // field names must start with capital letters!
 //
 type RequestVoteArgs struct {
-	Term         int // candidate's term
-	CandidateId  int // candidate who is requesting vote
-	LastLogIndex int // index of candidate's last log entry
-	LastLogTerm  int // term of candidate's last log entry
+	Term         int   // candidate's term
+	CandidateId  int   // candidate who is requesting vote
+	LastLogIndex int   // index of candidate's last log entry
+	LastLogTerm  int   // term of candidate's last log entry
+	ID           int64 // identifier of this RPC call
 }
 
 //
@@ -31,6 +32,7 @@ type AppendEntriesArgs struct {
 	PrevLogTerm  int   // term of prevLogIndex entry
 	Entries      []Log // log entries to store (empty for heartbeat; includes more than one for efficiency)
 	LeaderCommit int   // leader's commitIndex
+	ID           int64 // identifier of this RPC call
 }
 
 //

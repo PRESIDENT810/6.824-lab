@@ -57,7 +57,7 @@ const (
 
 // whether show corresponding log
 const (
-	showLog     = false
+	showLog     = true
 	showLock    = false
 	showPersist = false
 )
@@ -69,6 +69,8 @@ type Log struct {
 	Term    int         // the term for this log entry
 	Command interface{} // empty interface for the actual command of this log entry
 }
+
+var RPCIndex int64 = 0
 
 //
 // A Go object implementing a single Raft peer.
@@ -276,3 +278,5 @@ func (rf *Raft) MainRoutine() {
 		}
 	}
 }
+
+// TODO: fix race condition
