@@ -19,8 +19,9 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 			if rf.lastApplied < rf.commitIndex { // there is log committed but not applied
 				rf.lastApplied++ // now apply the next command
 				PrintLock("=================================[Server%d] Applier Unlock=================================\n", rf.me)
+				command := rf.logs[rf.lastApplied].Command
 				rf.mu.Unlock()
-				applyMsg := ApplyMsg{true, rf.logs[rf.lastApplied].Command, rf.lastApplied}
+				applyMsg := ApplyMsg{true, command, rf.lastApplied}
 				applyCh <- applyMsg
 			} else {
 				PrintLock("=================================[Server%d] Applier Unlock=================================\n", rf.me)
@@ -86,7 +87,7 @@ func (rf *Raft) SetCommitter() {
 //
 func (rf *Raft) SetTimer() {
 	rand.Seed(int64(rf.me))         // set a random number seed to ensure it generates different random number
-	timeout := rand.Int()%300 + 150 // generate a random timeout threshold between 150 to 300ms
+	timeout := rand.Int()%500 + 250 // generate a random timeout threshold between 150 to 300ms
 	for {
 		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
 			return

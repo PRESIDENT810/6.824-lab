@@ -18,9 +18,6 @@ package raft
 //
 
 import (
-	"bytes"
-	"labgob"
-	"log"
 	"sync"
 	"time"
 )
@@ -115,28 +112,6 @@ func (rf *Raft) GetState() (int, bool) {
 	isleader = rf.role == LEADER // true if I am the LEADER
 	rf.mu.Unlock()
 	return term, isleader
-}
-
-//
-// save Raft's persistent state to stable storage,
-// where it can later be retrieved after a crash and restart.
-// see paper's Figure 2 for a description of what should be persistent.
-//f
-func (rf *Raft) persist() {
-	buffer := new(bytes.Buffer)
-	encoder := labgob.NewEncoder(buffer)
-	PrintLock("=================================[Server%d] Persist Lock=================================\n", rf.me)
-	rf.mu.Lock()
-	ps := PersistentState{rf.currentTerm, rf.voteFor, rf.logs}
-	PrintLock("=================================[Server%d] Persist Unlock=================================\n", rf.me)
-	rf.mu.Unlock()
-	rf.LogPersistState(&ps)
-	err := encoder.Encode(ps)
-	if err != nil {
-		log.Fatal("encode error:", err)
-	}
-	data := buffer.Bytes()
-	rf.persister.SaveRaftState(data)
 }
 
 //
@@ -258,9 +233,6 @@ func (rf *Raft) MainRoutine() {
 		role := rf.role
 		PrintLock("=================================[Server%d] MainRoutine Unlock=================================\n", rf.me)
 		rf.mu.Unlock()
-		logMutex.Lock()
-		rf.LogServerStates()
-		logMutex.Unlock()
 		switch role {
 		case LEADER: // if you are a leader, then you should send heartbeats
 			//Printf("\n=====================================================================================================\n")
@@ -290,50 +262,13 @@ func (rf *Raft) MainRoutine() {
 			//Printf("=====================================================================================================\n")
 			rf.mu.Lock()
 			electionExpired := rf.electionExpired
-			rf.mu.Unlock()
 			if electionExpired { // but first check election timeout
 				rf.ResetTimer()     // restart election timer if I am starting an election
 				rf.role = CANDIDATE // if it expires, then convert to candidate and proceed
-				break
 			}
+			rf.mu.Unlock()
 			time.Sleep(50 * time.Millisecond) // after sleep a while, and check if my timeout expires again
 			break                             // if no timeout then it is fine, RPC call is handled in its handler so nothing to do here
 		}
 	}
-}
-
-//
-// find the last index of the given term in a raft instance's log
-// don't use lock here or everything will be fucked up
-//
-func (rf *Raft) findLastIndex(term int) int {
-	for i := len(rf.logs) - 1; i >= 0; i-- {
-		// sometimes I don't have log in this term, for example:
-		// INDEX:    0 1 2 3 4 5 6 7
-		// =========================
-		// LEADER:   1 1 1 2 2 4 4 4
-		// FOLLOWER: 1 1 1 3 3 3
-		// with prevLogIndex=5, so he don't have log entry with term 4, and he replies me with term 3,
-		// which means our log can only match with term at most 3
-		// but I don't have log entries with term 3, so I have to find a entry with term smaller than or equal to 3
-		if rf.logs[i].Term <= term {
-			return i
-		}
-	}
-	//panic("findLastIndex fucked up!!!")
-	return -1 // if we return -1, then this is really fucked up
-}
-
-//
-// find the first index of the given term in a raft instance's log
-// don't use lock here or everything will be fucked up
-//
-func (rf *Raft) findFirstIndex(term int) int {
-	for i := 0; i < len(rf.logs); i++ {
-		if rf.logs[i].Term == term {
-			return i
-		}
-	}
-	//panic("findFirstIndex fucked up!!!")
-	return -1 // if we return -1, then this is really fucked up
 }

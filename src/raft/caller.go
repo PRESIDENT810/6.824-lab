@@ -1,8 +1,11 @@
 package raft
 
 import (
+	"sync/atomic"
 	"time"
 )
+
+var serialNumber int64 = 0
 
 //
 // this function send AppendEntries RPCs to all its peers with no log
@@ -12,8 +15,12 @@ import (
 // and if the role changes, MainRoutine will know in the switch statement in the next iteration
 //
 func (rf *Raft) SendHeartbeats() {
+	rf.mu.Lock()
+	logMutex.Lock()
 	Printf("[server%d] enters SendHeartbeats\n", rf.me)
-	defer Printf("[Server%d] quits SendHeartbeats", rf.me)
+	rf.LogServerStates()
+	logMutex.Unlock()
+	rf.mu.Unlock()
 
 	rf.mu.Lock()                   // lock raft instance to prepare the RPC arguments
 	term := rf.currentTerm         // my term
@@ -29,10 +36,11 @@ func (rf *Raft) SendHeartbeats() {
 		prevLogIndex := rf.nextIndex[idx] - 1     // index of log entry immediately preceding new ones (nextIndex-1)
 		prevLogTerm := rf.logs[prevLogIndex].Term // term of prevLogIndex entry
 		entries := make([]Log, 0)                 // heartbeat should carry no log, if not match, resending will carry logs
+		id := atomic.AddInt64(&serialNumber, 1)   // get the RPC's serial number
 		rf.mu.Unlock()                            // unlock raft when prevLogIndex are prepared
-		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
-		reply := AppendEntriesReply{-1, false, -1, -1} // if you see -1 in reply, then the receiver never receives the RPC
-		go rf.SendAppendEntries(idx, args, reply)      // pass a copy instead of reference (I think args and reply may lost after it returns)
+		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit, id}
+		reply := AppendEntriesReply{}
+		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
 	}
 
 	// no need to check RPC status since no need to retry for heartbeat, so it's fine if RPC failed
@@ -46,8 +54,12 @@ func (rf *Raft) SendHeartbeats() {
 // then we commit these logs on the leader side, and followers will commit these in consequent AppendEntries RPCs
 //
 func (rf *Raft) RequestReplication(commandIndex int) {
+	rf.mu.Lock()
+	logMutex.Lock()
 	Printf("[Server%d] enters RequestReplication", rf.me)
-	defer Printf("[Server%d] quits RequestReplication", rf.me)
+	rf.LogServerStates()
+	logMutex.Unlock()
+	rf.mu.Unlock()
 
 	rf.mu.Lock()                   // lock raft instance to prepare the RPC arguments
 	term := rf.currentTerm         // my term
@@ -59,14 +71,17 @@ func (rf *Raft) RequestReplication(commandIndex int) {
 		if idx == leaderId {
 			continue // I already appended this shit
 		}
-		rf.mu.Lock()                              // lock raft instance to prepare the prevLogIndex
-		entries := rf.logs[rf.nextIndex[idx]:]    // nextIndex's possible maximal value is len(rf.logs), since we just append a new log, it won't exceed bound
+		rf.mu.Lock()                           // lock raft instance to prepare the prevLogIndex
+		entries := rf.logs[rf.nextIndex[idx]:] // nextIndex's possible maximal value is len(rf.logs), since we just append a new log, it won't exceed bound
+		entriesCopy := make([]Log, len(entries))
+		copy(entriesCopy, entries)
 		prevLogIndex := rf.nextIndex[idx] - 1     // index of log entry immediately preceding new ones (nextIndex-1)
 		prevLogTerm := rf.logs[prevLogIndex].Term // term of prevLogIndex entry
+		id := atomic.AddInt64(&serialNumber, 1)   // get the RPC's serial number
 		rf.mu.Unlock()                            // unlock raft when prevLogIndex are prepared
-		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
-		reply := AppendEntriesReply{-1, false, -1, -1} // if you see -1 in reply, then the receiver never receives the RPC
-		go rf.SendAppendEntries(idx, args, reply)      // pass a copy instead of reference (I think args and reply may lost after it returns)
+		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entriesCopy, leaderCommit, id}
+		reply := AppendEntriesReply{}
+		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
 	}
 }
 
@@ -74,13 +89,17 @@ func (rf *Raft) RequestReplication(commandIndex int) {
 // send AppendEntries RPC to a single server and handle the reply
 //
 func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
-	Printf("[Server%d] enters SendAppendEntries with prevLogIndex %d in term %d\n", rf.me, args.PrevLogIndex, args.Term)
-	defer Printf("[Server%d] quits SendAppendEntries with prevLogIndex %d in term %d\n", rf.me, args.PrevLogIndex, args.Term)
+	rf.mu.Lock()
+	logMutex.Lock()
+	Printf("[Server%d] enters SendAppendEntries with [RPC %d]\n", rf.me, args.RPCID)
+	rf.LogServerStates()
+	logMutex.Unlock()
+	rf.mu.Unlock()
 
 	success := rf.peers[server].Call("Raft.AppendEntries", &args, &reply)
 
 	if !success { // RPC failed
-		Printf("AppendEntries from LEADER %d to FOLLOWER %d RPC failed\n", rf.me, server)
+		Printf("AppendEntries from LEADER %d to FOLLOWER %d [RPC %d] failed\n", rf.me, server, args.RPCID)
 		time.Sleep(50 * time.Millisecond)
 		go rf.SendAppendEntries(server, args, reply) // resend AppendEntries RPC
 		return
@@ -101,7 +120,7 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		rf.voteFor = -1             // reset voteFor
 		rf.role = FOLLOWER          // convert to follower
 		go rf.persist()             // currentTerm and voteFor are changed, so I need to save my states
-		go rf.ResetTimer()
+		rf.ResetTimer()
 		return
 	}
 
@@ -110,7 +129,7 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		rf.nextIndex[server] = rf.matchIndex[server] + 1              // increment nextIndex by the number of entries just append
 	} else { // this follower didn't catch up with my logs
 		if rf.nextIndex[server]-1 == args.PrevLogIndex { // no one else has decremented nextIndex
-			rf.nextIndex[server] = rf.findNextIndex(&args, &reply, server) // find what value of nextIndex I should set
+			rf.nextIndex[server] = rf.findNextIndex(&args, &reply, server) + 1 // findNextIndex returns the entry where our logs might match, and nextIndex should be its next entry
 			//rf.nextIndex[server] = rf.nextIndex[server] - 1 // then I will decrement nextIndex
 		}
 	}
@@ -121,14 +140,16 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		leaderId := rf.me      // current leader, which is me
 		nextIndex := rf.nextIndex[server]
 		entries := rf.logs[nextIndex:] // send the log entry with nextIndex, since follower doesn't match, nextIndex won't exceed len(rf.log)
+		entriesCopy := make([]Log, len(entries))
+		copy(entriesCopy, entries)
 		leaderCommit := rf.commitIndex
-		prevLogIndex := rf.nextIndex[server] - 1
+		prevLogIndex := nextIndex - 1
 		prevLogTerm := rf.logs[prevLogIndex].Term
-		args = AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit}
-		reply = AppendEntriesReply{-1, false, -1, -1} // if you see -1 in reply, then the receiver never receives the RPC
-		go rf.SendAppendEntries(server, args, reply)  // resend AppendEntries RPC
+		id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
+		args = AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entriesCopy, leaderCommit, id}
+		reply = AppendEntriesReply{}
+		go rf.SendAppendEntries(server, args, reply) // resend AppendEntries RPC
 	}
-	// TODO: why the fuck does this function can have reply {term: -1, success: false} ???
 }
 
 //
@@ -139,8 +160,12 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 // This function quits only when I converts to follower or leader, or my election time expires so I should re-elect
 //
 func (rf *Raft) RunElection() {
+	rf.mu.Lock()
+	logMutex.Lock()
 	Printf("[Server%d] enters RunElection\n", rf.me)
-	defer Printf("[Server%d] quits RunElection\n", rf.me)
+	rf.LogServerStates()
+	logMutex.Unlock()
+	rf.mu.Unlock()
 
 	PrintLock("=================================[Server%d] RunElection Lock=================================\n", rf.me)
 	rf.mu.Lock()                              // lock raft instance to prepare the RPC arguments
@@ -160,8 +185,9 @@ func (rf *Raft) RunElection() {
 		if idx == candidateId {
 			continue // I don't have to vote for myself, I did this in my MainRoutine function
 		}
-		args := RequestVoteArgs{term, candidateId, lastLogIndex, lastLogTerm}
-		reply := RequestVoteReply{-1, false}                        // if you see -1 in reply, then the receiver never receives the RPC
+		id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
+		args := RequestVoteArgs{term, candidateId, lastLogIndex, lastLogTerm, id}
+		reply := RequestVoteReply{}
 		go rf.SendRequestVote(idx, args, reply, &upVote, &downVote) // send RPC to each server
 	}
 }
@@ -171,12 +197,16 @@ func (rf *Raft) RunElection() {
 // also signal the voteDone cond var
 //
 func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestVoteReply, upVote *int, downVote *int) {
-	Printf("[Server%d] enters SendRequestVote in term %d\n", rf.me, args.Term)
-	defer Printf("[Server%d] quits SendRequestVote in term %d\n", rf.me, args.Term)
+	rf.mu.Lock()
+	logMutex.Lock()
+	Printf("[Server%d] enters SendRequestVote with [RPC %d]\n", rf.me, args.RPCID)
+	rf.LogServerStates()
+	logMutex.Unlock()
+	rf.mu.Unlock()
 
 	success := rf.peers[server].Call("Raft.RequestVote", &args, &reply)
 	if !success { // RPC failed
-		Printf("RequestVote from LEADER %d to FOLLOWER %d RPC failed\n", rf.me, server)
+		Printf("RequestVote from LEADER %d to FOLLOWER %d [RPC %d] failed\n", rf.me, server, args.RPCID)
 		return
 	}
 
@@ -203,7 +233,7 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 		rf.voteFor = -1             // reset my voteFor
 		rf.role = FOLLOWER          // convert to follower
 		go rf.persist()             // currentTerm and voteFor are changed, so I need to save my states
-		go rf.ResetTimer()
+		rf.ResetTimer()
 		return
 	}
 

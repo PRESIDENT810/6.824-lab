@@ -9,6 +9,8 @@ type RequestVoteArgs struct {
 	CandidateId  int // candidate who is requesting vote
 	LastLogIndex int // index of candidate's last log entry
 	LastLogTerm  int // term of candidate's last log entry
+
+	RPCID int64 // identifier for RPC
 }
 
 //
@@ -31,6 +33,8 @@ type AppendEntriesArgs struct {
 	PrevLogTerm  int   // term of prevLogIndex entry
 	Entries      []Log // log entries to store (empty for heartbeat; includes more than one for efficiency)
 	LeaderCommit int   // leader's commitIndex
+
+	RPCID int64 // identifier for RPC
 }
 
 //
@@ -50,6 +54,8 @@ type AppendEntriesReply struct {
 // AppendEntries RPC handler
 //
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	rf.persist()
+
 	PrintLock("=================================[Server%d] AppendEntries handler lock=================================\n", rf.me)
 	rf.mu.Lock()
 	rf.LogAppendEntriesReceive(args, reply)
@@ -63,7 +69,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return
 	}
 
-	go rf.ResetTimer() // reset timer upon AppendEntries (but if the term in arguments is outdated, you should not reset your timer!)
+	rf.ResetTimer() // reset timer upon AppendEntries (but if the term in arguments is outdated, you should not reset your timer!)
 
 	if args.Term > rf.currentTerm { // my term is too old
 		rf.currentTerm = args.Term // update my term first
@@ -130,6 +136,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // RequestVote RPC handler.
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
+	rf.persist()
+
 	PrintLock("=================================[Server%d] RequestVote handler lock=================================\n", rf.me)
 	rf.mu.Lock()
 	rf.LogRequestVoteReceive(args, reply)
@@ -167,7 +175,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		if rf.voteFor != args.CandidateId {
 			go rf.persist() // voteFor are changed, so I need to save my states
 		}
-		go rf.ResetTimer()
+		rf.ResetTimer()
 		return
 	}
 
