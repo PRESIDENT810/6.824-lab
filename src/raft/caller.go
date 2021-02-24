@@ -14,7 +14,7 @@ var serialNumber int64 = 0
 // I don't think we need to wait for AppendEntries RPC to return, since we will handle the reply in SendAppendEntries
 // and if the role changes, MainRoutine will know in the switch statement in the next iteration
 //
-func (rf *Raft) SendHeartbeats() {
+func (rf *Raft) SendHeartbeats(term int) {
 	rf.mu.Lock()
 	logMutex.Lock()
 	Printf("[server%d] enters SendHeartbeats\n", rf.me)
@@ -22,28 +22,27 @@ func (rf *Raft) SendHeartbeats() {
 	logMutex.Unlock()
 	rf.mu.Unlock()
 
-	rf.mu.Lock()                   // lock raft instance to prepare the RPC arguments
-	term := rf.currentTerm         // my term
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	if term != rf.currentTerm { // in case currentTerm is changed by other goroutines before sending RPC
+		return
+	}
+
 	leaderId := rf.me              // current leader, which is me
 	leaderCommit := rf.commitIndex // last log I committed
-	rf.mu.Unlock()                 // unlock raft when RPC arguments are prepared
-
 	for idx, _ := range rf.peers {
-		if idx == leaderId {
+		if idx == rf.me {
 			continue
 		}
-		rf.mu.Lock()                              // lock raft instance to prepare the prevLogIndex
 		prevLogIndex := rf.nextIndex[idx] - 1     // index of log entry immediately preceding new ones (nextIndex-1)
 		prevLogTerm := rf.logs[prevLogIndex].Term // term of prevLogIndex entry
 		entries := make([]Log, 0)                 // heartbeat should carry no log, if not match, resending will carry logs
 		id := atomic.AddInt64(&serialNumber, 1)   // get the RPC's serial number
-		rf.mu.Unlock()                            // unlock raft when prevLogIndex are prepared
 		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit, id}
 		reply := AppendEntriesReply{}
 		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
 	}
-
-	// no need to check RPC status since no need to retry for heartbeat, so it's fine if RPC failed
 }
 
 //
@@ -53,7 +52,7 @@ func (rf *Raft) SendHeartbeats() {
 // if majority of the cluster replied success, then the logs are regard as replicated
 // then we commit these logs on the leader side, and followers will commit these in consequent AppendEntries RPCs
 //
-func (rf *Raft) RequestReplication(commandIndex int) {
+func (rf *Raft) RequestReplication(term int) {
 	rf.mu.Lock()
 	logMutex.Lock()
 	Printf("[Server%d] enters RequestReplication", rf.me)
@@ -61,24 +60,25 @@ func (rf *Raft) RequestReplication(commandIndex int) {
 	logMutex.Unlock()
 	rf.mu.Unlock()
 
-	rf.mu.Lock()                   // lock raft instance to prepare the RPC arguments
-	term := rf.currentTerm         // my term
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	if term != rf.currentTerm { // in case currentTerm is changed by other goroutines before sending RPC
+		return
+	}
+
 	leaderId := rf.me              // current leader, which is me
 	leaderCommit := rf.commitIndex // last log I committed
-	rf.mu.Unlock()                 // unlock raft when RPC arguments are prepared
-
 	for idx, _ := range rf.peers {
 		if idx == leaderId {
 			continue // I already appended this shit
 		}
-		rf.mu.Lock()                           // lock raft instance to prepare the prevLogIndex
 		entries := rf.logs[rf.nextIndex[idx]:] // nextIndex's possible maximal value is len(rf.logs), since we just append a new log, it won't exceed bound
 		entriesCopy := make([]Log, len(entries))
 		copy(entriesCopy, entries)
 		prevLogIndex := rf.nextIndex[idx] - 1     // index of log entry immediately preceding new ones (nextIndex-1)
 		prevLogTerm := rf.logs[prevLogIndex].Term // term of prevLogIndex entry
 		id := atomic.AddInt64(&serialNumber, 1)   // get the RPC's serial number
-		rf.mu.Unlock()                            // unlock raft when prevLogIndex are prepared
 		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entriesCopy, leaderCommit, id}
 		reply := AppendEntriesReply{}
 		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
@@ -159,7 +159,7 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 // since labrpc guarantees that every RPC returns, we don't need to handle RPC timeout, etc.
 // This function quits only when I converts to follower or leader, or my election time expires so I should re-elect
 //
-func (rf *Raft) RunElection() {
+func (rf *Raft) RunElection(term int) {
 	rf.mu.Lock()
 	logMutex.Lock()
 	Printf("[Server%d] enters RunElection\n", rf.me)
@@ -170,7 +170,6 @@ func (rf *Raft) RunElection() {
 	PrintLock("=================================[Server%d] RunElection Lock=================================\n", rf.me)
 	rf.mu.Lock()                              // lock raft instance to prepare the RPC arguments
 	rf.ResetTimer()                           // reset the election timer because when starting an election
-	term := rf.currentTerm                    // my term
 	candidateId := rf.me                      // candidate id, which is me!
 	lastLogIndex := len(rf.logs) - 1          // index of my last log entry
 	lastLogTerm := rf.logs[lastLogIndex].Term // term of my last log entry
@@ -180,6 +179,13 @@ func (rf *Raft) RunElection() {
 	//electionDone := make(chan int, 1)
 	upVote := 1   // how many servers agree to vote for me (initialized to 1 since I vote for myself!)
 	downVote := 0 // how many servers disagree to vote for me
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	if term != rf.currentTerm { // in case currentTerm is changed by other goroutines before sending RPC
+		return
+	}
 
 	for idx, _ := range rf.peers {
 		if idx == candidateId {
@@ -247,8 +253,8 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 					rf.nextIndex[idx] = args.LastLogIndex + 1 // initialize nextIndex to leader last log index+1
 					rf.matchIndex[idx] = 0                    // initialize matchIndex to 0
 				}
-				go rf.SetCommitter()   // set a committer to periodically check if the commitIndex can be incremented
-				go rf.SendHeartbeats() // upon election, send initial heartbeat to each server
+				go rf.SetCommitter()                 // set a committer to periodically check if the commitIndex can be incremented
+				go rf.SendHeartbeats(rf.currentTerm) // upon election, send initial heartbeat to each server
 			}
 		} else { // this server agree to vote for me
 			*downVote++

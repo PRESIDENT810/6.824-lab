@@ -140,7 +140,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	if isLeader {
 		rf.logs = append(rf.logs, Log{rf.currentTerm, command}) // log to replicate to the cluster
 		go rf.persist()                                         // logs are changed, so I need to save my states
-		go rf.RequestReplication(index)
+		go rf.RequestReplication(rf.currentTerm)
 	}
 
 	return index, term, isLeader
@@ -229,29 +229,25 @@ func (rf *Raft) MainRoutine() {
 			return
 		}
 		rf.mu.Lock()
-		PrintLock("=================================[Server%d] MainRoutine Lock=================================\n", rf.me)
-		role := rf.role
-		PrintLock("=================================[Server%d] MainRoutine Unlock=================================\n", rf.me)
-		rf.mu.Unlock()
-		switch role {
+		switch rf.role {
 		case LEADER: // if you are a leader, then you should send heartbeats
 			//Printf("\n=====================================================================================================\n")
 			//Printf("=================================[Server%d] is LEADER=================================\n", rf.me)
 			//Printf("=====================================================================================================\n")
-			go rf.SendHeartbeats() // block here to ensure that no more than 10 heartbeat being sent in a second
+			go rf.SendHeartbeats(rf.currentTerm) // block here to ensure that no more than 10 heartbeat being sent in a second
+			rf.mu.Unlock()
 			time.Sleep(100 * time.Millisecond)
 			break
 		case CANDIDATE: // if you are a candidate, you should start a election
 			//Printf("\n=====================================================================================================\n")
 			//Printf("=================================[Server%d] is CANDIDATE=================================\n", rf.me)
 			//Printf("=====================================================================================================\n")
-			rf.mu.Lock()
 			if rf.electionExpired {
-				rf.currentTerm++           // increment my current term
-				rf.voteFor = rf.me         // vote for myself
-				rf.electionExpired = false // reset electionExpired to let timer decided when to re-elect
-				go rf.persist()            // currentTerm and voteFor are changed, so I need to save my states
-				go rf.RunElection()        // if electionExpired is false, it means you elect too fast, wait for the timeout
+				rf.currentTerm++                  // increment my current term
+				rf.voteFor = rf.me                // vote for myself
+				rf.electionExpired = false        // reset electionExpired to let timer decided when to re-elect
+				go rf.persist()                   // currentTerm and voteFor are changed, so I need to save my states
+				go rf.RunElection(rf.currentTerm) // if electionExpired is false, it means you elect too fast, wait for the timeout
 			}
 			rf.mu.Unlock()
 			time.Sleep(50 * time.Millisecond)
@@ -260,9 +256,7 @@ func (rf *Raft) MainRoutine() {
 			//Printf("\n=====================================================================================================\n")
 			//Printf("=================================[Server%d] is FOLLOWER=================================\n", rf.me)
 			//Printf("=====================================================================================================\n")
-			rf.mu.Lock()
-			electionExpired := rf.electionExpired
-			if electionExpired { // but first check election timeout
+			if rf.electionExpired { // but first check election timeout
 				rf.ResetTimer()     // restart election timer if I am starting an election
 				rf.role = CANDIDATE // if it expires, then convert to candidate and proceed
 			}
