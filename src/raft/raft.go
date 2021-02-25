@@ -48,13 +48,6 @@ const (
 	FOLLOWER  = 2
 )
 
-// defined const to identify
-const (
-	SENDING = 0
-	SUCCESS = 1
-	FAIL    = 2
-)
-
 // whether show corresponding log
 const (
 	showLog     = false
@@ -250,7 +243,7 @@ func (rf *Raft) MainRoutine() {
 				go rf.RunElection(rf.currentTerm) // if electionExpired is false, it means you elect too fast, wait for the timeout
 			}
 			rf.mu.Unlock()
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(20 * time.Millisecond)
 			break
 		case FOLLOWER: // if you are a follower, you should do nothing but wait for RPC from your leader
 			//Printf("\n=====================================================================================================\n")
@@ -261,7 +254,7 @@ func (rf *Raft) MainRoutine() {
 				rf.role = CANDIDATE // if it expires, then convert to candidate and proceed
 			}
 			rf.mu.Unlock()
-			time.Sleep(50 * time.Millisecond) // after sleep a while, and check if my timeout expires again
+			time.Sleep(20 * time.Millisecond) // after sleep a while, and check if my timeout expires again
 			break                             // if no timeout then it is fine, RPC call is handled in its handler so nothing to do here
 		}
 	}
