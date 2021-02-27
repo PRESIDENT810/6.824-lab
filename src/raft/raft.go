@@ -92,6 +92,8 @@ type Raft struct {
 	role             int       // 0 for LEADER; 1 for CANDIDATE; 2 for FOLLOWER
 	electionLastTime time.Time // timestamp when last time heard from a leader
 	electionExpired  bool      // if true, then last election expired and should run new election
+	upVote           int
+	downVote         int
 }
 
 // return currentTerm and whether this server
@@ -230,32 +232,30 @@ func (rf *Raft) MainRoutine() {
 			go rf.SendHeartbeats(rf.currentTerm) // block here to ensure that no more than 10 heartbeat being sent in a second
 			rf.mu.Unlock()
 			time.Sleep(100 * time.Millisecond)
-			break
 		case CANDIDATE: // if you are a candidate, you should start a election
 			//Printf("\n=====================================================================================================\n")
 			//Printf("=================================[Server%d] is CANDIDATE=================================\n", rf.me)
 			//Printf("=====================================================================================================\n")
 			if rf.electionExpired {
-				rf.currentTerm++                  // increment my current term
-				rf.voteFor = rf.me                // vote for myself
-				rf.electionExpired = false        // reset electionExpired to let timer decided when to re-elect
-				go rf.persist()                   // currentTerm and voteFor are changed, so I need to save my states
+				rf.currentTerm++   // increment my current term
+				rf.voteFor = rf.me // vote for myself
+				rf.ResetTimer()
 				go rf.RunElection(rf.currentTerm) // if electionExpired is false, it means you elect too fast, wait for the timeout
+				go rf.persist()                   // currentTerm and voteFor are changed, so I need to save my states
 			}
 			rf.mu.Unlock()
 			time.Sleep(20 * time.Millisecond)
-			break
 		case FOLLOWER: // if you are a follower, you should do nothing but wait for RPC from your leader
 			//Printf("\n=====================================================================================================\n")
 			//Printf("=================================[Server%d] is FOLLOWER=================================\n", rf.me)
 			//Printf("=====================================================================================================\n")
 			if rf.electionExpired { // but first check election timeout
-				rf.ResetTimer()     // restart election timer if I am starting an election
 				rf.role = CANDIDATE // if it expires, then convert to candidate and proceed
+				rf.mu.Unlock()
+			} else {
+				rf.mu.Unlock()
+				time.Sleep(20 * time.Millisecond) // after sleep a while, and check if my timeout expires again
 			}
-			rf.mu.Unlock()
-			time.Sleep(20 * time.Millisecond) // after sleep a while, and check if my timeout expires again
-			break                             // if no timeout then it is fine, RPC call is handled in its handler so nothing to do here
 		}
 	}
 }

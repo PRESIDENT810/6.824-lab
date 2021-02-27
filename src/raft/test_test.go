@@ -10,11 +10,11 @@ package raft
 
 import (
 	"fmt"
+	"sync/atomic"
 	"testing"
 )
 import "time"
 import "math/rand"
-import "sync/atomic"
 import "sync"
 
 // The tester generously allows solutions to complete elections in one second
@@ -604,7 +604,7 @@ func TestPersist22C(t *testing.T) {
 
 	index := 1
 	for iters := 0; iters < 5; iters++ {
-		cfg.one(10+index, servers, true)
+		cfg.one(10+index, servers, true) // 11, 14, 17
 		index++
 
 		leader1 := cfg.checkOneLeader()
@@ -612,7 +612,7 @@ func TestPersist22C(t *testing.T) {
 		cfg.disconnect((leader1 + 1) % servers)
 		cfg.disconnect((leader1 + 2) % servers)
 
-		cfg.one(10+index, servers-2, true)
+		cfg.one(10+index, servers-2, true) // 12, 15, 18
 		index++
 
 		cfg.disconnect((leader1 + 0) % servers)
@@ -629,7 +629,7 @@ func TestPersist22C(t *testing.T) {
 		cfg.start1((leader1 + 3) % servers)
 		cfg.connect((leader1 + 3) % servers)
 
-		cfg.one(10+index, servers-2, true)
+		cfg.one(10+index, servers-2, true) // 13, 16, 19
 		index++
 
 		cfg.connect((leader1 + 4) % servers)

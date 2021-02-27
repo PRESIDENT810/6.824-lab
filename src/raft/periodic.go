@@ -86,8 +86,8 @@ func (rf *Raft) SetCommitter() {
 // to notify itself it should run a new election
 //
 func (rf *Raft) SetTimer() {
-	rand.Seed(int64(rf.me))         // set a random number seed to ensure it generates different random number
-	timeout := rand.Int()%500 + 250 // generate a random timeout threshold between 150 to 300ms
+	rand.Seed(int64(rf.me) * time.Now().Unix()) // set a random number seed to ensure it generates different random number
+	timeout := rand.Int()%150 + 300             // generate a random timeout threshold between 150 to 300ms
 	for {
 		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
 			return
@@ -100,8 +100,8 @@ func (rf *Raft) SetTimer() {
 			if rf.role != LEADER {
 				Printf("[Server%d]'s election time expired\n\n", rf.me)
 			}
-			rf.electionLastTime = electionCurrentTime // reset the timer
-			timeout = rand.Int()%150 + 150            // reset the random timeout threshold
+			rf.electionLastTime = time.Now() // reset the timer
+			timeout = rand.Int()%150 + 300   // generate a random timeout threshold between 150 to 300ms
 		}
 		rf.mu.Unlock()
 	}

@@ -54,7 +54,7 @@ type AppendEntriesReply struct {
 // AppendEntries RPC handler
 //
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	rf.persist()
+	go rf.persist()
 
 	PrintLock("=================================[Server%d] AppendEntries handler lock=================================\n", rf.me)
 	rf.mu.Lock()
@@ -76,6 +76,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.voteFor = -1            // in this new term, I didn't vote for anyone
 		rf.role = FOLLOWER         // convert myself to a follower, no matter what is my old role
 		go rf.persist()            // currentTerm and voteFor are changed, so I need to save my states
+	}
+
+	if rf.role == CANDIDATE { // we have same term, but I'm a candidate (impossible for two leaders at same term)
+		rf.role = FOLLOWER // convert myself to a follower, since this term we have a leader
+		go rf.persist()
 	}
 
 	prevLogIndex := args.PrevLogIndex // use a local variable to store prevLogIndex for efficiency
@@ -136,7 +141,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // RequestVote RPC handler.
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	rf.persist()
+	go rf.persist()
 
 	PrintLock("=================================[Server%d] RequestVote handler lock=================================\n", rf.me)
 	rf.mu.Lock()
@@ -171,10 +176,10 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	if (!voteSomeoneElse) && upToDate { // either I voted for nobody, or I voted for you already, and you log is more up-to-date than mine
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = true
-		rf.voteFor = args.CandidateId // change my voteFor to the candidate
 		if rf.voteFor != args.CandidateId {
 			go rf.persist() // voteFor are changed, so I need to save my states
 		}
+		rf.voteFor = args.CandidateId // change my voteFor to the candidate
 		rf.ResetTimer()
 		return
 	}

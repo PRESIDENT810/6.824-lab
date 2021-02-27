@@ -177,8 +177,8 @@ func (rf *Raft) RunElection(term int) {
 	rf.mu.Unlock() // unlock raft when RPC arguments are prepared
 
 	//electionDone := make(chan int, 1)
-	upVote := 1   // how many servers agree to vote for me (initialized to 1 since I vote for myself!)
-	downVote := 0 // how many servers disagree to vote for me
+	rf.upVote = 1   // how many servers agree to vote for me (initialized to 1 since I vote for myself!)
+	rf.downVote = 0 // how many servers disagree to vote for me
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -194,7 +194,7 @@ func (rf *Raft) RunElection(term int) {
 		id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
 		args := RequestVoteArgs{term, candidateId, lastLogIndex, lastLogTerm, id}
 		reply := RequestVoteReply{}
-		go rf.SendRequestVote(idx, args, reply, &upVote, &downVote) // send RPC to each server
+		go rf.SendRequestVote(idx, args, reply) // send RPC to each server
 	}
 }
 
@@ -202,7 +202,7 @@ func (rf *Raft) RunElection(term int) {
 // send RequestVote RPC to a single server and handle the reply
 // also signal the voteDone cond var
 //
-func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestVoteReply, upVote *int, downVote *int) {
+func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestVoteReply) {
 	rf.mu.Lock()
 	logMutex.Lock()
 	Printf("[Server%d] enters SendRequestVote with [RPC %d]\n", rf.me, args.RPCID)
@@ -213,6 +213,8 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 	success := rf.peers[server].Call("Raft.RequestVote", &args, &reply)
 	if !success { // RPC failed
 		Printf("RequestVote from LEADER %d to FOLLOWER %d [RPC %d] failed\n", rf.me, server, args.RPCID)
+		time.Sleep(50 * time.Millisecond)
+		go rf.SendRequestVote(server, args, reply) // resend AppendEntries RPC
 		return
 	}
 
@@ -245,8 +247,8 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 
 	if rf.role == CANDIDATE { // if there is already a result, then I don't need to check this shit
 		if reply.VoteGranted { // this server agree to vote for me
-			*upVote++
-			if *upVote > len(rf.peers)/2 && reply.Term == rf.currentTerm { // I won majority in this term
+			rf.upVote++
+			if rf.upVote > len(rf.peers)/2 && reply.Term == rf.currentTerm { // I won majority in this term
 				rf.role = LEADER // so I'm a leader now
 				// initialized the leader
 				for idx, _ := range rf.nextIndex {
@@ -257,8 +259,8 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 				go rf.SendHeartbeats(rf.currentTerm) // upon election, send initial heartbeat to each server
 			}
 		} else { // this server agree to vote for me
-			*downVote++
-			if *downVote > len(rf.peers)/2 && reply.Term == rf.currentTerm { // I lost majority in this term
+			rf.downVote++
+			if rf.downVote > len(rf.peers)/2 && reply.Term == rf.currentTerm { // I lost majority in this term
 				rf.role = FOLLOWER // so I'm a follower now
 			}
 		}
