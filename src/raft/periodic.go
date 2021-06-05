@@ -21,7 +21,8 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 				PrintLock("=================================[Server%d] Applier Unlock=================================\n", rf.me)
 				command := rf.logs[rf.lastApplied].Command
 				rf.mu.Unlock()
-				applyMsg := ApplyMsg{true, command, rf.lastApplied}
+				// TODO: implement snapshot in 2D
+				applyMsg := ApplyMsg{true, command, rf.lastApplied, false, nil, 0, 0}
 				applyCh <- applyMsg
 			} else {
 				PrintLock("=================================[Server%d] Applier Unlock=================================\n", rf.me)
@@ -84,14 +85,20 @@ func (rf *Raft) SetCommitter() {
 // if the time is more than a random threshold between 150ms to 300ms
 // then there is a timeout, and the raft instance should set electionExpired to true
 // to notify itself it should run a new election
+
+// The ticker go routine starts a new election if this peer hasn't received
+// heartsbeats recently.
+
 //
-func (rf *Raft) SetTimer() {
+func (rf *Raft) ticker() {
 	rand.Seed(int64(rf.me) * time.Now().Unix()) // set a random number seed to ensure it generates different random number
 	timeout := rand.Int()%150 + 300             // generate a random timeout threshold between 150 to 300ms
-	for {
-		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
-			return
-		}
+	for rf.killed() == false {                  // if the raft instance is killed, it means this test is finished and we should quit
+
+		// Your code here to check if a leader election should
+		// be started and to randomize sleeping time using
+		// time.Sleep().
+
 		time.Sleep(10 * time.Millisecond) // sleep a while to save some CPU time
 		electionCurrentTime := time.Now()
 		rf.mu.Lock()

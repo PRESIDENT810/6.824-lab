@@ -31,14 +31,20 @@ import "labrpc"
 // CommandValid to true to indicate that the ApplyMsg contains a newly
 // committed log entry.
 //
-// in Lab 3 you'll want to send other kinds of messages (e.g.,
-// snapshots) on the applyCh; at that point you can add fields to
-// ApplyMsg, but set CommandValid to false for these other uses.
+// in part 2D you'll want to send other kinds of messages (e.g.,
+// snapshots) on the applyCh, but set CommandValid to false for these
+// other uses.
 //
 type ApplyMsg struct {
 	CommandValid bool
 	Command      interface{}
 	CommandIndex int
+
+	// For 2D:
+	SnapshotValid bool
+	Snapshot      []byte
+	SnapshotTerm  int
+	SnapshotIndex int
 }
 
 // defined const to identify roles for each server
@@ -201,12 +207,15 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.role = FOLLOWER // all servers should be followers when starting up
 	rf.ResetTimer()    // initialize the timer
 
-	go rf.SetTimer()          // set a timer to calculate elapsed time for election
+	go rf.ticker()            // set a timer to calculate elapsed time for election
 	go rf.SetApplier(applyCh) // set a applier to apply logs (send through applyCh)
 	go rf.MainRoutine()       // start raft instance's main routine
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
+
+	// start ticker goroutine to start elections
+	go rf.ticker()
 
 	return rf
 }
