@@ -54,13 +54,6 @@ const (
 	FOLLOWER  = 2
 )
 
-// whether show corresponding log
-const (
-	showLog     = false
-	showLock    = false
-	showPersist = false
-)
-
 // if raft instance is supposed to save its state, pass a integer to this channel
 var stateChange chan int
 

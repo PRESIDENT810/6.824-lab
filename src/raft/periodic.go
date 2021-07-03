@@ -12,7 +12,7 @@ import (
 //
 func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 	for {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		for {
 			PrintLock("=================================[Server%d] Applier Lock=================================\n", rf.me)
 			rf.mu.Lock()
@@ -73,7 +73,7 @@ func (rf *Raft) SetCommitter() {
 		}
 		PrintLock("=================================[Server%d] Committer Unlock=================================\n", rf.me)
 		rf.mu.Unlock()
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
 			return
 		}
@@ -92,14 +92,14 @@ func (rf *Raft) SetCommitter() {
 //
 func (rf *Raft) ticker() {
 	rand.Seed(int64(rf.me) * time.Now().Unix()) // set a random number seed to ensure it generates different random number
-	timeout := rand.Int()%150 + 300             // generate a random timeout threshold between 150 to 300ms
+	timeout := rand.Intn(200) + 200             // generate a random timeout threshold between 150 to 300ms
 	for rf.killed() == false {                  // if the raft instance is killed, it means this test is finished and we should quit
 
 		// Your code here to check if a leader election should
 		// be started and to randomize sleeping time using
 		// time.Sleep().
 
-		time.Sleep(10 * time.Millisecond) // sleep a while to save some CPU time
+		time.Sleep(5 * time.Millisecond) // sleep a while to save some CPU time
 		electionCurrentTime := time.Now()
 		rf.mu.Lock()
 		if electionCurrentTime.Sub(rf.electionLastTime).Milliseconds() > int64(timeout) {
@@ -108,7 +108,7 @@ func (rf *Raft) ticker() {
 				Printf("[Server%d]'s election time expired\n\n", rf.me)
 			}
 			rf.electionLastTime = time.Now() // reset the timer
-			timeout = rand.Int()%150 + 300   // generate a random timeout threshold between 150 to 300ms
+			timeout = rand.Intn(200) + 200   // generate a random timeout threshold between 150 to 300ms
 		}
 		rf.mu.Unlock()
 	}

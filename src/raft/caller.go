@@ -15,12 +15,14 @@ var serialNumber int64 = 0
 // and if the role changes, MainRoutine will know in the switch statement in the next iteration
 //
 func (rf *Raft) SendHeartbeats(term int) {
-	rf.mu.Lock()
-	logMutex.Lock()
-	Printf("[server%d] enters SendHeartbeats\n", rf.me)
-	rf.LogServerStates()
-	logMutex.Unlock()
-	rf.mu.Unlock()
+	if debug {
+		rf.mu.Lock()
+		logMutex.Lock()
+		Printf("[server%d] enters SendHeartbeats\n", rf.me)
+		rf.LogServerStates()
+		logMutex.Unlock()
+		rf.mu.Unlock()
+	}
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -53,12 +55,14 @@ func (rf *Raft) SendHeartbeats(term int) {
 // then we commit these logs on the leader side, and followers will commit these in consequent AppendEntries RPCs
 //
 func (rf *Raft) RequestReplication(term int) {
-	rf.mu.Lock()
-	logMutex.Lock()
-	Printf("[Server%d] enters RequestReplication", rf.me)
-	rf.LogServerStates()
-	logMutex.Unlock()
-	rf.mu.Unlock()
+	if debug {
+		rf.mu.Lock()
+		logMutex.Lock()
+		Printf("[Server%d] enters RequestReplication", rf.me)
+		rf.LogServerStates()
+		logMutex.Unlock()
+		rf.mu.Unlock()
+	}
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -89,12 +93,14 @@ func (rf *Raft) RequestReplication(term int) {
 // send AppendEntries RPC to a single server and handle the reply
 //
 func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
-	rf.mu.Lock()
-	logMutex.Lock()
-	Printf("[Server%d] enters SendAppendEntries with [RPC %d]\n", rf.me, args.RPCID)
-	rf.LogServerStates()
-	logMutex.Unlock()
-	rf.mu.Unlock()
+	if debug {
+		rf.mu.Lock()
+		logMutex.Lock()
+		Printf("[Server%d] enters SendAppendEntries with [RPC %d]\n", rf.me, args.RPCID)
+		rf.LogServerStates()
+		logMutex.Unlock()
+		rf.mu.Unlock()
+	}
 
 	success := rf.peers[server].Call("Raft.AppendEntries", &args, &reply)
 
@@ -160,12 +166,14 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 // This function quits only when I converts to follower or leader, or my election time expires so I should re-elect
 //
 func (rf *Raft) RunElection(term int) {
-	rf.mu.Lock()
-	logMutex.Lock()
-	Printf("[Server%d] enters RunElection\n", rf.me)
-	rf.LogServerStates()
-	logMutex.Unlock()
-	rf.mu.Unlock()
+	if debug {
+		rf.mu.Lock()
+		logMutex.Lock()
+		Printf("[Server%d] enters RunElection\n", rf.me)
+		rf.LogServerStates()
+		logMutex.Unlock()
+		rf.mu.Unlock()
+	}
 
 	PrintLock("=================================[Server%d] RunElection Lock=================================\n", rf.me)
 	rf.mu.Lock()                              // lock raft instance to prepare the RPC arguments
@@ -203,12 +211,14 @@ func (rf *Raft) RunElection(term int) {
 // also signal the voteDone cond var
 //
 func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestVoteReply) {
-	rf.mu.Lock()
-	logMutex.Lock()
-	Printf("[Server%d] enters SendRequestVote with [RPC %d]\n", rf.me, args.RPCID)
-	rf.LogServerStates()
-	logMutex.Unlock()
-	rf.mu.Unlock()
+	if debug {
+		rf.mu.Lock()
+		logMutex.Lock()
+		Printf("[Server%d] enters SendRequestVote with [RPC %d]\n", rf.me, args.RPCID)
+		rf.LogServerStates()
+		logMutex.Unlock()
+		rf.mu.Unlock()
+	}
 
 	success := rf.peers[server].Call("Raft.RequestVote", &args, &reply)
 	if !success { // RPC failed
