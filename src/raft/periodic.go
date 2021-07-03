@@ -14,18 +14,15 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 	for {
 		time.Sleep(10 * time.Millisecond)
 		for {
-			PrintLock("=================================[Server%d] Applier Lock=================================\n", rf.me)
 			rf.mu.Lock()
 			if rf.lastApplied < rf.commitIndex { // there is log committed but not applied
 				rf.lastApplied++ // now apply the next command
-				PrintLock("=================================[Server%d] Applier Unlock=================================\n", rf.me)
 				command := rf.logs[rf.lastApplied].Command
 				rf.mu.Unlock()
 				// TODO: implement snapshot in 2D
 				applyMsg := ApplyMsg{true, command, rf.lastApplied, false, nil, 0, 0}
 				applyCh <- applyMsg
 			} else {
-				PrintLock("=================================[Server%d] Applier Unlock=================================\n", rf.me)
 				rf.mu.Unlock()
 				break
 			}
@@ -47,10 +44,8 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 //
 func (rf *Raft) SetCommitter() {
 	for {
-		PrintLock("=================================[Server%d] Committer Lock=================================\n", rf.me)
 		rf.mu.Lock()
 		if rf.role != LEADER { // if I'm not leader, I have no right to increment commitIndex here
-			PrintLock("=================================[Server%d] Committer Unlock=================================\n", rf.me)
 			rf.mu.Unlock()
 			return
 		}
@@ -71,7 +66,6 @@ func (rf *Raft) SetCommitter() {
 			}
 			N--
 		}
-		PrintLock("=================================[Server%d] Committer Unlock=================================\n", rf.me)
 		rf.mu.Unlock()
 		time.Sleep(10 * time.Millisecond)
 		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit

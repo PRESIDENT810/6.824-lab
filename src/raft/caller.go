@@ -15,14 +15,6 @@ var serialNumber int64 = 0
 // and if the role changes, MainRoutine will know in the switch statement in the next iteration
 //
 func (rf *Raft) SendHeartbeats(term int) {
-	if debug {
-		rf.mu.Lock()
-		logMutex.Lock()
-		Printf("[server%d] enters SendHeartbeats\n", rf.me)
-		rf.LogServerStates()
-		logMutex.Unlock()
-		rf.mu.Unlock()
-	}
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -55,14 +47,6 @@ func (rf *Raft) SendHeartbeats(term int) {
 // then we commit these logs on the leader side, and followers will commit these in consequent AppendEntries RPCs
 //
 func (rf *Raft) RequestReplication(term int) {
-	if debug {
-		rf.mu.Lock()
-		logMutex.Lock()
-		Printf("[Server%d] enters RequestReplication", rf.me)
-		rf.LogServerStates()
-		logMutex.Unlock()
-		rf.mu.Unlock()
-	}
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -93,14 +77,6 @@ func (rf *Raft) RequestReplication(term int) {
 // send AppendEntries RPC to a single server and handle the reply
 //
 func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
-	if debug {
-		rf.mu.Lock()
-		logMutex.Lock()
-		Printf("[Server%d] enters SendAppendEntries with [RPC %d]\n", rf.me, args.RPCID)
-		rf.LogServerStates()
-		logMutex.Unlock()
-		rf.mu.Unlock()
-	}
 
 	success := rf.peers[server].Call("Raft.AppendEntries", &args, &reply)
 
@@ -111,11 +87,8 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		return
 	}
 
-	PrintLock("=================================[Server%d] SendAppendEntries Lock=================================\n", rf.me)
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	defer PrintLock("=================================[Server%d] SendAppendEntries Lock=================================\n", rf.me)
-	defer rf.LogAppendEntriesSend(rf.me, server, &args, &reply)
 
 	if args.Term != rf.currentTerm { // a long winding path of blood, sweat, tears and despair
 		return
@@ -166,23 +139,13 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 // This function quits only when I converts to follower or leader, or my election time expires so I should re-elect
 //
 func (rf *Raft) RunElection(term int) {
-	if debug {
-		rf.mu.Lock()
-		logMutex.Lock()
-		Printf("[Server%d] enters RunElection\n", rf.me)
-		rf.LogServerStates()
-		logMutex.Unlock()
-		rf.mu.Unlock()
-	}
 
-	PrintLock("=================================[Server%d] RunElection Lock=================================\n", rf.me)
 	rf.mu.Lock()                              // lock raft instance to prepare the RPC arguments
 	rf.ResetTimer()                           // reset the election timer because when starting an election
 	candidateId := rf.me                      // candidate id, which is me!
 	lastLogIndex := len(rf.logs) - 1          // index of my last log entry
 	lastLogTerm := rf.logs[lastLogIndex].Term // term of my last log entry
-	PrintLock("=================================[Server%d] RunElection Unlock=================================\n", rf.me)
-	rf.mu.Unlock() // unlock raft when RPC arguments are prepared
+	rf.mu.Unlock()                            // unlock raft when RPC arguments are prepared
 
 	//electionDone := make(chan int, 1)
 	rf.upVote = 1   // how many servers agree to vote for me (initialized to 1 since I vote for myself!)
@@ -211,14 +174,6 @@ func (rf *Raft) RunElection(term int) {
 // also signal the voteDone cond var
 //
 func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestVoteReply) {
-	if debug {
-		rf.mu.Lock()
-		logMutex.Lock()
-		Printf("[Server%d] enters SendRequestVote with [RPC %d]\n", rf.me, args.RPCID)
-		rf.LogServerStates()
-		logMutex.Unlock()
-		rf.mu.Unlock()
-	}
 
 	success := rf.peers[server].Call("Raft.RequestVote", &args, &reply)
 	if !success { // RPC failed
@@ -228,11 +183,8 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 		return
 	}
 
-	PrintLock("=================================[Server%d] SendRequestVote Lock=================================\n", rf.me)
 	rf.mu.Lock()         // add mutex lock before you access attributes of raft instance
 	defer rf.mu.Unlock() // release mutex lock when the function quits
-	defer PrintLock("=================================[Server%d] SendRequestVote Unlock=================================\n", rf.me)
-	defer rf.LogRequestVoteSend(rf.me, server, &args, &reply)
 
 	if args.Term != rf.currentTerm { // a long winding path of blood, sweat, tears and despair
 		return

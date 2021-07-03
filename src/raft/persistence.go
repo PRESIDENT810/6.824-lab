@@ -21,19 +21,15 @@ type PersistentState struct {
 // save Raft's persistent state to stable storage,
 // where it can later be retrieved after a crash and restart.
 // see paper's Figure 2 for a description of what should be persistent.
-//f
+//
 func (rf *Raft) persist() {
 	buffer := new(bytes.Buffer)
 	encoder := labgob.NewEncoder(buffer)
-	PrintLock("=================================[Server%d] Persist Lock=================================\n", rf.me)
 	rf.mu.Lock()
-	PrintPersist("\n[server%d] persists its state\n\n", rf.me)
 	logs := make([]Log, len(rf.logs))
 	copy(logs, rf.logs)
 	ps := PersistentState{rf.currentTerm, rf.voteFor, logs}
-	PrintLock("=================================[Server%d] Persist Unlock=================================\n", rf.me)
 	rf.mu.Unlock()
-	rf.LogPersistState(&ps)
 	err := encoder.Encode(ps)
 	if err != nil {
 		log.Fatal("encode error:", err)
@@ -54,14 +50,11 @@ func (rf *Raft) readPersist(data []byte) {
 	decoder := labgob.NewDecoder(buffer)
 	var ps PersistentState
 	err := decoder.Decode(&ps)
-	rf.LogReadPersistState(&ps)
 	if err != nil {
 		log.Fatal("decode error:", err)
 	}
 
-	PrintLock("=================================[Server%d] readPersist Lock=================================\n", rf.me)
 	rf.mu.Lock()
-	PrintPersist("\n[server%d] reads its persist state\n\n", rf.me)
 
 	// persistent state on all servers
 	rf.currentTerm = ps.CurrentTerm
@@ -78,7 +71,6 @@ func (rf *Raft) readPersist(data []byte) {
 		rf.nextIndex[idx] = 1 // log starts with 1, so the nextIndex should be 1 (every raft peer has the same log[0]!)
 	}
 	rf.matchIndex = make([]int, len(rf.peers)) // don't need to initialize now since I'm not a leader on first boot
-	PrintLock("=================================[Server%d] readPersist Unlock=================================\n", rf.me)
 	rf.mu.Unlock()
 }
 
