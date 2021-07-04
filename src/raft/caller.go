@@ -77,6 +77,9 @@ func (rf *Raft) RequestReplication(term int) {
 // send AppendEntries RPC to a single server and handle the reply
 //
 func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
+	if rf.killed() { // if raft instance is dead, then no need to sending RPCs
+		return
+	}
 
 	success := rf.peers[server].Call("Raft.AppendEntries", &args, &reply)
 
@@ -109,7 +112,6 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 	} else { // this follower didn't catch up with my logs
 		if rf.nextIndex[server]-1 == args.PrevLogIndex { // no one else has decremented nextIndex
 			rf.nextIndex[server] = rf.findNextIndex(&args, &reply, server) + 1 // findNextIndex returns the entry where our logs might match, and nextIndex should be its next entry
-			//rf.nextIndex[server] = rf.nextIndex[server] - 1 // then I will decrement nextIndex
 		}
 	}
 
@@ -174,6 +176,9 @@ func (rf *Raft) RunElection(term int) {
 // also signal the voteDone cond var
 //
 func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestVoteReply) {
+	if rf.killed() { // if raft instance is dead, then no need to sending RPCs
+		return
+	}
 
 	success := rf.peers[server].Call("Raft.RequestVote", &args, &reply)
 	if !success { // RPC failed
@@ -235,28 +240,16 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 // then this function should not be called because someone else already adjusted the value of nextIndex
 //
 func (rf *Raft) findNextIndex(args *AppendEntriesArgs, reply *AppendEntriesReply, server int) int {
-	res := -1
 
-	// case 1: he doesn't even have a entry at this index, so I should retry at his last entry's index
-	if reply.ConflictTerm == -2 {
-		res = reply.TryNextIndex
+	lastMatchedIdx := rf.findLastIndex(reply.ConflictTerm)
+
+	// case 1: exists an entry in its log with ConflictTerm
+	if lastMatchedIdx != -1 {
+		rf.nextIndex[server] = lastMatchedIdx + 1
+	} else {
+		// case 2: no entry with ConflictTerm (either ConflictTerm is none or I don't have a log entry with ConflictTerm)
+		rf.nextIndex[server] = reply.ConflictIndex
 	}
 
-	// case 2: his term at prevLogIndex is newer, so I should retry at the index he gave me
-	if reply.ConflictTerm > args.PrevLogTerm {
-		res = reply.TryNextIndex
-	}
-
-	// case 3: my term at prevLogIndex is newer, so I should retry at the index of my last entry with the term he gave me (or the term "just" smaller than this one)
-	if reply.ConflictTerm < args.PrevLogTerm {
-		lastIndex := rf.findLastIndex(reply.ConflictTerm)
-		if lastIndex != -1 {
-			res = lastIndex
-		}
-	}
-
-	if res == -1 { // not sure when should we have this case, but if things fucked up, comment 3 cases above and use this as returned value
-		return rf.nextIndex[server] - 1 // I don't know when the result will be -1, but if it is, then just return nextIndex-1
-	}
-	return res
+	return rf.nextIndex[server] - 1
 }

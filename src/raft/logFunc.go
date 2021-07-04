@@ -85,8 +85,8 @@ func (rf *Raft) LogRequestVoteReceive(args *RequestVoteArgs, reply *RequestVoteR
 func (rf *Raft) LogAppendEntriesSend(sender, receiver int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	logMutex.Lock()
 	defer logMutex.Unlock()
-	Printf("[server%d] sends [AppendEntries RPC %d] to [server%d]\nArguments:\nterm: %d, leaderId: %d, prevLogIndex: %d, prevLogTerm: %d, entry: %v, leaderCommit: %d\nReply:\nterm: %d, success: %t, conflictTerm: %d, TryNextIndex: %d\n\n\n",
-		sender, args.RPCID, receiver, args.Term, args.LeaderId, args.PrevLogIndex, args.PrevLogTerm, args.Entries, args.LeaderCommit, reply.Term, reply.Success, reply.ConflictTerm, reply.TryNextIndex)
+	Printf("[server%d] sends [AppendEntries RPC %d] to [server%d]\nArguments:\nterm: %d, leaderId: %d, prevLogIndex: %d, prevLogTerm: %d, entry: %v, leaderCommit: %d\nReply:\nterm: %d, success: %t, conflictTerm: %d, ConflictIndex: %d\n\n\n",
+		sender, args.RPCID, receiver, args.Term, args.LeaderId, args.PrevLogIndex, args.PrevLogTerm, args.Entries, args.LeaderCommit, reply.Term, reply.Success, reply.ConflictTerm, reply.ConflictIndex)
 	rf.LogServerStates()
 }
 

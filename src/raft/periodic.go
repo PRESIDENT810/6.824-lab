@@ -11,7 +11,7 @@ import (
 // which is to send log through applyCh, and also increase raft instance's lastApplied value
 //
 func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
-	for {
+	for !rf.killed() {
 		time.Sleep(10 * time.Millisecond)
 		for {
 			rf.mu.Lock()
@@ -27,9 +27,6 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 				break
 			}
 		}
-		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
-			return
-		}
 	}
 }
 
@@ -43,7 +40,7 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 // return when it's no longer leader
 //
 func (rf *Raft) SetCommitter() {
-	for {
+	for rf.killed() == false {
 		rf.mu.Lock()
 		if rf.role != LEADER { // if I'm not leader, I have no right to increment commitIndex here
 			rf.mu.Unlock()
@@ -68,9 +65,6 @@ func (rf *Raft) SetCommitter() {
 		}
 		rf.mu.Unlock()
 		time.Sleep(10 * time.Millisecond)
-		if rf.killed() { // if the raft instance is killed, it means this test is finished and we should quit
-			return
-		}
 	}
 }
 

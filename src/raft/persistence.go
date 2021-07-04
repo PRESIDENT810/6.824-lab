@@ -79,16 +79,22 @@ func (rf *Raft) readPersist(data []byte) {
 // don't use lock here or everything will be fucked up
 //
 func (rf *Raft) findLastIndex(term int) int {
+	if term == -2 { // term is none
+		return -1
+	}
+
 	for i := len(rf.logs) - 1; i >= 0; i-- {
 		// sometimes I don't have log in this term, for example:
 		// INDEX:    0 1 2 3 4 5 6 7
 		// =========================
 		// LEADER:   1 1 1 2 2 4 4 4
 		// FOLLOWER: 1 1 1 3 3 3
-		// with prevLogIndex=5, so he don't have log entry with term 4, and he replies me with term 3,
-		// which means our log can only match with term at most 3
-		// but I don't have log entries with term 3, so I have to find a entry with term smaller than or equal to 3
-		if rf.logs[i].Term <= term {
+		// with prevLogIndex=5, so he don't have log entry with term 4, and he replies me with ConflictTerm 3 and ConflictIndex 3
+		// I cannot find any log entry with term=3, so I have to start from ConflictIndex, hopefully the handler got correct logs before ConflictIndex
+		// For handler, log entries before ConflictIndex might be correct (because log entries with index >= ConflictIndex must be wrong)
+		// So we start trying from ConflictIndex, if that does not match, I will receive false in consequent AppendEntries RPC
+		// and I will try again from older log entries
+		if rf.logs[i].Term == term {
 			return i
 		}
 	}
