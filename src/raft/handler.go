@@ -80,6 +80,8 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		go rf.persist()
 	}
 
+	// TODO: I don't think the handling here is exactly the same as the raft guide, should revise later
+
 	prevLogIndex := args.PrevLogIndex // use a local variable to store prevLogIndex for efficiency
 
 	// case 1: I don't even have a entry at this index, so you should retry at my last entry's index

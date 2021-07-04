@@ -230,8 +230,7 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 }
 
 //
-// this function find the appropriate nextIndex a raft instance should set
-// according to AppendEntries RPC's reply
+// this function find the appropriate nextIndex a raft instance should set according to AppendEntries RPC's reply
 // Note: if rf.nextIndex[server]-1 == args.PrevLogIndex is not satisfied, which means in other RPCs nextIndex is already reset
 // then this function should not be called because someone else already adjusted the value of nextIndex
 //
