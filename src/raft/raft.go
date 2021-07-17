@@ -94,8 +94,8 @@ type Raft struct {
 	upVote           int
 	downVote         int
 
-	newestAppendEntriesRPCID int64
-	newestRequestVoteRPCID   int64
+	newestAppendEntriesRPCID []int64
+	newestRequestVoteRPCID   []int64
 }
 
 // return currentTerm and whether this server
@@ -208,8 +208,8 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
-	rf.newestAppendEntriesRPCID = 0
-	rf.newestRequestVoteRPCID = 0
+	rf.newestAppendEntriesRPCID = make([]int64, len(peers))
+	rf.newestRequestVoteRPCID = make([]int64, len(peers))
 
 	return rf
 }

@@ -65,11 +65,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	if rf.newestAppendEntriesRPCID > args.RPCID {
+	if rf.newestAppendEntriesRPCID[args.LeaderId] > args.RPCID {
 		reply.Ignore = true
 		return
 	} else {
-		rf.newestAppendEntriesRPCID = args.RPCID
+		rf.newestAppendEntriesRPCID[args.LeaderId] = args.RPCID
 	}
 
 	if args.Term < rf.currentTerm { // my term is newer
@@ -147,11 +147,11 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	if rf.newestRequestVoteRPCID > args.RPCID {
+	if rf.newestRequestVoteRPCID[args.CandidateId] > args.RPCID {
 		reply.Ignore = true
 		return
 	} else {
-		rf.newestRequestVoteRPCID = args.RPCID
+		rf.newestRequestVoteRPCID[args.CandidateId] = args.RPCID
 	}
 
 	upToDate := true // is your log more up-to-date?
