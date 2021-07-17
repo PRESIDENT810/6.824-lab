@@ -2,7 +2,6 @@ package raft
 
 import (
 	"sync/atomic"
-	"time"
 )
 
 var serialNumber int64 = 0
@@ -85,8 +84,10 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 
 	if !success { // RPC failed
 		Printf("AppendEntries from LEADER %d to FOLLOWER %d [RPC %d] failed\n", rf.me, server, args.RPCID)
-		time.Sleep(50 * time.Millisecond)
-		go rf.SendAppendEntries(server, args, reply) // resend AppendEntries RPC
+		return
+	}
+
+	if reply.Ignore {
 		return
 	}
 
@@ -111,7 +112,7 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		rf.nextIndex[server] = rf.matchIndex[server] + 1              // increment nextIndex by the number of entries just append
 	} else { // this follower didn't catch up with my logs
 		if rf.nextIndex[server]-1 == args.PrevLogIndex { // no one else has decremented nextIndex
-			rf.nextIndex[server] = rf.findNextIndex(&args, &reply, server) + 1 // findNextIndex returns the entry where our logs might match, and nextIndex should be its next entry
+			rf.nextIndex[server] = rf.findNextIndex(&args, &reply, server) // findNextIndex returns the entry where our logs might match, and nextIndex should be its next entry
 		}
 	}
 
@@ -183,8 +184,10 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 	success := rf.peers[server].Call("Raft.RequestVote", &args, &reply)
 	if !success { // RPC failed
 		Printf("RequestVote from LEADER %d to FOLLOWER %d [RPC %d] failed\n", rf.me, server, args.RPCID)
-		time.Sleep(50 * time.Millisecond)
-		go rf.SendRequestVote(server, args, reply) // resend AppendEntries RPC
+		return
+	}
+
+	if reply.Ignore {
 		return
 	}
 
@@ -245,11 +248,9 @@ func (rf *Raft) findNextIndex(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	// case 1: exists an entry in its log with ConflictTerm
 	if lastMatchedIdx != -1 {
-		rf.nextIndex[server] = lastMatchedIdx + 1
+		return lastMatchedIdx + 1
 	} else {
 		// case 2: no entry with ConflictTerm (either ConflictTerm is none or I don't have a log entry with ConflictTerm)
-		rf.nextIndex[server] = reply.ConflictIndex
+		return reply.ConflictIndex
 	}
-
-	return rf.nextIndex[server] - 1
 }

@@ -80,7 +80,7 @@ func (rf *Raft) SetCommitter() {
 //
 func (rf *Raft) ticker() {
 	rand.Seed(int64(rf.me) * time.Now().Unix()) // set a random number seed to ensure it generates different random number
-	timeout := rand.Intn(200) + 200             // generate a random timeout threshold between 150 to 300ms
+	timeout := rand.Intn(300) + 350             // generate a random timeout threshold between 150 to 300ms
 	for rf.killed() == false {                  // if the raft instance is killed, it means this test is finished and we should quit
 
 		// Your code here to check if a leader election should
@@ -96,7 +96,7 @@ func (rf *Raft) ticker() {
 				Printf("[Server%d]'s election time expired\n\n", rf.me)
 			}
 			rf.electionLastTime = time.Now() // reset the timer
-			timeout = rand.Intn(200) + 200   // generate a random timeout threshold between 150 to 300ms
+			timeout = rand.Intn(300) + 350   // generate a random timeout threshold between 150 to 300ms
 		}
 		rf.mu.Unlock()
 	}

@@ -93,6 +93,9 @@ type Raft struct {
 	electionExpired  bool      // if true, then last election expired and should run new election
 	upVote           int
 	downVote         int
+
+	newestAppendEntriesRPCID int64
+	newestRequestVoteRPCID   int64
 }
 
 // return currentTerm and whether this server
@@ -205,8 +208,8 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
-	// start ticker goroutine to start elections
-	go rf.ticker()
+	rf.newestAppendEntriesRPCID = 0
+	rf.newestRequestVoteRPCID = 0
 
 	return rf
 }
@@ -228,7 +231,7 @@ func (rf *Raft) MainRoutine() {
 		case LEADER: // if you are a leader, then you should send heartbeats
 			go rf.SendHeartbeats(rf.currentTerm) // block here to ensure that no more than 10 heartbeat being sent in a second
 			rf.mu.Unlock()
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(250 * time.Millisecond)
 		case CANDIDATE: // if you are a candidate, you should start a election
 			if rf.electionExpired {
 				rf.currentTerm++   // increment my current term

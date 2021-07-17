@@ -20,6 +20,9 @@ type RequestVoteArgs struct {
 type RequestVoteReply struct {
 	Term        int  // currentTerm of the receiver, for the sender to update itself
 	VoteGranted bool // true means candidate received vote
+
+	// if this RPC is received before any RPC that was sent after it, then ignore it (the newer RPC will take care)
+	Ignore bool
 }
 
 //
@@ -48,6 +51,9 @@ type AppendEntriesReply struct {
 	// these two attributes are used for optimization when rejecting AppendEntries RPC
 	ConflictTerm  int // the term of the conflicting entry
 	ConflictIndex int // the first log entry index that conflict with the leader's
+
+	// if this RPC is received before any RPC that was sent after it, then ignore it (the newer RPC will take care)
+	Ignore bool
 }
 
 //
@@ -58,6 +64,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
+	if rf.newestAppendEntriesRPCID > args.RPCID {
+		reply.Ignore = true
+		return
+	} else {
+		rf.newestAppendEntriesRPCID = args.RPCID
+	}
 
 	if args.Term < rf.currentTerm { // my term is newer
 		reply.Term = rf.currentTerm // return my current term to update the sender
@@ -133,6 +146,13 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
+	if rf.newestRequestVoteRPCID > args.RPCID {
+		reply.Ignore = true
+		return
+	} else {
+		rf.newestRequestVoteRPCID = args.RPCID
+	}
 
 	upToDate := true // is your log more up-to-date?
 	myLastLogIndex := len(rf.logs) - 1
