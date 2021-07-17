@@ -93,7 +93,7 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	if args.Term != rf.currentTerm { // a long winding path of blood, sweat, tears and despair
+	if args.Term != rf.currentTerm || rf.role != LEADER { // a long winding path of blood, sweat, tears and despair
 		return
 	}
 
