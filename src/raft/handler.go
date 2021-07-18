@@ -65,13 +65,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	if rf.newestAppendEntriesRPCID[args.LeaderId] > args.RPCID {
-		reply.Ignore = true
-		return
-	} else {
-		rf.newestAppendEntriesRPCID[args.LeaderId] = args.RPCID
-	}
-
 	if args.Term < rf.currentTerm { // my term is newer
 		reply.Term = rf.currentTerm // return my current term to update the sender
 		reply.Success = false       // reply false if term < currentTerm
@@ -146,13 +139,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-
-	if rf.newestRequestVoteRPCID[args.CandidateId] > args.RPCID {
-		reply.Ignore = true
-		return
-	} else {
-		rf.newestRequestVoteRPCID[args.CandidateId] = args.RPCID
-	}
 
 	upToDate := true // is your log more up-to-date?
 	myLastLogIndex := len(rf.logs) - 1

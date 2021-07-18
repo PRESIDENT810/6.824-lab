@@ -231,7 +231,7 @@ func (rf *Raft) MainRoutine() {
 		case LEADER: // if you are a leader, then you should send heartbeats
 			go rf.SendHeartbeats(rf.currentTerm) // block here to ensure that no more than 10 heartbeat being sent in a second
 			rf.mu.Unlock()
-			time.Sleep(250 * time.Millisecond)
+			time.Sleep(300 * time.Millisecond)
 		case CANDIDATE: // if you are a candidate, you should start a election
 			if rf.electionExpired {
 				rf.currentTerm++   // increment my current term

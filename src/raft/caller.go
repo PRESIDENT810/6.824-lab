@@ -66,6 +66,7 @@ func (rf *Raft) RequestReplication(term int) {
 		prevLogIndex := rf.nextIndex[idx] - 1     // index of log entry immediately preceding new ones (nextIndex-1)
 		prevLogTerm := rf.logs[prevLogIndex].Term // term of prevLogIndex entry
 		id := atomic.AddInt64(&serialNumber, 1)   // get the RPC's serial number
+		rf.newestAppendEntriesRPCID[idx] = id
 		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entriesCopy, leaderCommit, id}
 		reply := AppendEntriesReply{}
 		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
@@ -87,12 +88,12 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		return
 	}
 
-	if reply.Ignore {
-		return
-	}
-
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
+	if rf.newestAppendEntriesRPCID[server] > args.RPCID {
+		return
+	}
 
 	if args.Term != rf.currentTerm || rf.role != LEADER { // a long winding path of blood, sweat, tears and despair
 		return
@@ -128,6 +129,7 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		prevLogIndex := nextIndex - 1
 		prevLogTerm := rf.logs[prevLogIndex].Term
 		id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
+		rf.newestRequestVoteRPCID[server] = id
 		args = AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entriesCopy, leaderCommit, id}
 		reply = AppendEntriesReply{}
 		go rf.SendAppendEntries(server, args, reply) // resend AppendEntries RPC
@@ -166,6 +168,7 @@ func (rf *Raft) RunElection(term int) {
 			continue // I don't have to vote for myself, I did this in my MainRoutine function
 		}
 		id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
+		rf.newestRequestVoteRPCID[idx] = id
 		args := RequestVoteArgs{term, candidateId, lastLogIndex, lastLogTerm, id}
 		reply := RequestVoteReply{}
 		go rf.SendRequestVote(idx, args, reply) // send RPC to each server
@@ -187,12 +190,12 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 		return
 	}
 
-	if reply.Ignore {
-		return
-	}
-
 	rf.mu.Lock()         // add mutex lock before you access attributes of raft instance
 	defer rf.mu.Unlock() // release mutex lock when the function quits
+
+	if rf.newestRequestVoteRPCID[server] > args.RPCID {
+		return
+	}
 
 	if args.Term != rf.currentTerm { // a long winding path of blood, sweat, tears and despair
 		return
