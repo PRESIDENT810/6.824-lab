@@ -15,8 +15,8 @@ var serialNumber int64 = 0
 //
 func (rf *Raft) SendHeartbeats(term int) {
 
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	//rf.mu.Lock()
+	//defer rf.mu.Unlock()
 
 	if term != rf.currentTerm { // in case currentTerm is changed by other goroutines before sending RPC
 		return
@@ -103,7 +103,7 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		rf.currentTerm = reply.Term // set currentTerm = T
 		rf.voteFor = -1             // reset voteFor
 		rf.role = FOLLOWER          // convert to follower
-		go rf.persist()             // currentTerm and voteFor are changed, so I need to save my states
+		rf.persist()                // currentTerm and voteFor are changed, so I need to save my states
 		rf.ResetTimer()
 		return
 	}
@@ -145,19 +145,19 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 //
 func (rf *Raft) RunElection(term int) {
 
-	rf.mu.Lock()                              // lock raft instance to prepare the RPC arguments
+	//rf.mu.Lock()                              // lock raft instance to prepare the RPC arguments
 	rf.ResetTimer()                           // reset the election timer because when starting an election
 	candidateId := rf.me                      // candidate id, which is me!
 	lastLogIndex := len(rf.logs) - 1          // index of my last log entry
 	lastLogTerm := rf.logs[lastLogIndex].Term // term of my last log entry
-	rf.mu.Unlock()                            // unlock raft when RPC arguments are prepared
+	//rf.mu.Unlock()                            // unlock raft when RPC arguments are prepared
 
 	//electionDone := make(chan int, 1)
 	rf.upVote = 1   // how many servers agree to vote for me (initialized to 1 since I vote for myself!)
 	rf.downVote = 0 // how many servers disagree to vote for me
 
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
+	//rf.mu.Lock()
+	//defer rf.mu.Unlock()
 
 	if term != rf.currentTerm { // in case currentTerm is changed by other goroutines before sending RPC
 		return
@@ -213,7 +213,7 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 		rf.currentTerm = reply.Term // update my current term
 		rf.voteFor = -1             // reset my voteFor
 		rf.role = FOLLOWER          // convert to follower
-		go rf.persist()             // currentTerm and voteFor are changed, so I need to save my states
+		rf.persist()                // currentTerm and voteFor are changed, so I need to save my states
 		rf.ResetTimer()
 		return
 	}
@@ -228,8 +228,8 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 					rf.nextIndex[idx] = args.LastLogIndex + 1 // initialize nextIndex to leader last log index+1
 					rf.matchIndex[idx] = 0                    // initialize matchIndex to 0
 				}
-				go rf.SetCommitter()                 // set a committer to periodically check if the commitIndex can be incremented
-				go rf.SendHeartbeats(rf.currentTerm) // upon election, send initial heartbeat to each server
+				go rf.SetCommitter()              // set a committer to periodically check if the commitIndex can be incremented
+				rf.SendHeartbeats(rf.currentTerm) // upon election, send initial heartbeat to each server
 			}
 		} else { // this server agree to vote for me
 			rf.downVote++

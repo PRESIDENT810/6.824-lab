@@ -134,7 +134,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 
 	if isLeader {
 		rf.logs = append(rf.logs, Log{rf.currentTerm, command}) // log to replicate to the cluster
-		go rf.persist()                                         // logs are changed, so I need to save my states
+		rf.persist()                                            // logs are changed, so I need to save my states
 		go rf.RequestReplication(rf.currentTerm)
 	}
 
@@ -229,16 +229,16 @@ func (rf *Raft) MainRoutine() {
 		rf.mu.Lock()
 		switch rf.role {
 		case LEADER: // if you are a leader, then you should send heartbeats
-			go rf.SendHeartbeats(rf.currentTerm) // block here to ensure that no more than 10 heartbeat being sent in a second
+			rf.SendHeartbeats(rf.currentTerm)
 			rf.mu.Unlock()
-			time.Sleep(300 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 		case CANDIDATE: // if you are a candidate, you should start a election
 			if rf.electionExpired {
 				rf.currentTerm++   // increment my current term
 				rf.voteFor = rf.me // vote for myself
 				rf.ResetTimer()
-				go rf.RunElection(rf.currentTerm) // if electionExpired is false, it means you elect too fast, wait for the timeout
-				go rf.persist()                   // currentTerm and voteFor are changed, so I need to save my states
+				rf.RunElection(rf.currentTerm) // if electionExpired is false, it means you elect too fast, wait for the timeout
+				rf.persist()                   // currentTerm and voteFor are changed, so I need to save my states
 			}
 			rf.mu.Unlock()
 			time.Sleep(20 * time.Millisecond)

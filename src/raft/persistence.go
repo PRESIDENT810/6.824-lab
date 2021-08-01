@@ -25,11 +25,9 @@ type PersistentState struct {
 func (rf *Raft) persist() {
 	buffer := new(bytes.Buffer)
 	encoder := labgob.NewEncoder(buffer)
-	rf.mu.Lock()
 	logs := make([]Log, len(rf.logs))
 	copy(logs, rf.logs)
 	ps := PersistentState{rf.currentTerm, rf.voteFor, logs}
-	rf.mu.Unlock()
 	err := encoder.Encode(ps)
 	if err != nil {
 		log.Fatal("encode error:", err)

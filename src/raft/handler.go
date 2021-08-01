@@ -60,15 +60,16 @@ type AppendEntriesReply struct {
 // AppendEntries RPC handler
 //
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	go rf.persist()
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	rf.persist()
+
 	if args.Term < rf.currentTerm { // my term is newer
 		reply.Term = rf.currentTerm // return my current term to update the sender
 		reply.Success = false       // reply false if term < currentTerm
-		go rf.persist()             // currentTerm is changed, so I need to save my states
+		rf.persist()                // currentTerm is changed, so I need to save my states
 		return
 	}
 
@@ -78,12 +79,12 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.currentTerm = args.Term // update my term first
 		rf.voteFor = -1            // in this new term, I didn't vote for anyone
 		rf.role = FOLLOWER         // convert myself to a follower, no matter what is my old role
-		go rf.persist()            // currentTerm and voteFor are changed, so I need to save my states
+		rf.persist()               // currentTerm and voteFor are changed, so I need to save my states
 	}
 
 	if rf.role == CANDIDATE { // we have same term, but I'm a candidate (impossible for two leaders at same term)
 		rf.role = FOLLOWER // convert myself to a follower, since this term we have a leader
-		go rf.persist()
+		rf.persist()
 	}
 
 	prevLogIndex := args.PrevLogIndex // use a local variable to store prevLogIndex for efficiency
@@ -122,7 +123,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		}
 	}
 
-	go rf.persist() // my logs are changed, so I need to save my states
+	rf.persist() // my logs are changed, so I need to save my states
 
 	if args.LeaderCommit > rf.commitIndex { // rule 5 for AppendEntries RPC in figure 2
 		rf.commitIndex = min(args.LeaderCommit, prevLogIndex+len(args.Entries))
@@ -135,10 +136,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 // RequestVote RPC handler.
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	go rf.persist()
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
+	rf.persist()
 
 	upToDate := true // is your log more up-to-date?
 	myLastLogIndex := len(rf.logs) - 1
@@ -152,7 +154,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.currentTerm = args.Term // update my term first
 		rf.voteFor = -1            // in this new term, I didn't vote for anyone
 		rf.role = FOLLOWER         // convert myself to a follower, no matter what is my old role
-		go rf.persist()            // currentTerm and voteFor are changed, so I need to save my states
+		rf.persist()               // currentTerm and voteFor are changed, so I need to save my states
 		// remember when receiving RequestVote RPC you shouldn't reset the timer!!
 	}
 
@@ -168,7 +170,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = true
 		if rf.voteFor != args.CandidateId {
-			go rf.persist() // voteFor are changed, so I need to save my states
+			rf.persist() // voteFor are changed, so I need to save my states
 		}
 		rf.voteFor = args.CandidateId // change my voteFor to the candidate
 		rf.ResetTimer()
