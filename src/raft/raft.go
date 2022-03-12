@@ -225,7 +225,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 //
 // the main raft routine periodically checks its state
 // if raft is a follower or candidate (not sure about this) with election timeout,
-// then it runs a election trying to become a leader
+// then it runs an election trying to become a leader
 // if raft is a leader, then send heartbeats to its followers
 //
 func (rf *Raft) MainRoutine() {

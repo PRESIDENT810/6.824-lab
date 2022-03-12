@@ -2,7 +2,7 @@ package raft
 
 // CondInstallSnapshot
 //
-// A service wants to switch to snapshot.  Only do so if Raft hasn't
+// A service wants to switch to snapshot.  Only do so if Raft doesn't
 // have more recent info since it communicate the snapshot on applyCh.
 //
 func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int, snapshot []byte) bool {
