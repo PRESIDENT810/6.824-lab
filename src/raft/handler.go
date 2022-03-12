@@ -93,7 +93,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	prevLogIndex := args.PrevLogIndex // use a local variable to store prevLogIndex for efficiency
 
-	// case 1: I don't even have a entry at this index, so you should retry at my last entry's index
+	// case 1: I don't even have an entry at this index, so you should retry at my last entry's index
 	if len(rf.logs) <= prevLogIndex { // I don't have this log for this index, you have to retry with my last index
 		reply.Term = rf.currentTerm        // same as sender's term (if newer, I returned false already; if older, I updated already)
 		reply.Success = false              // reply false if log doesn't contain an entry at prevLogIndex whose term matches prevLogTerm
@@ -108,7 +108,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if myTerm != args.PrevLogTerm {
 		reply.Term = rf.currentTerm                     // same as sender's term (if newer, I returned false already; if older, I updated already)
 		reply.Success = false                           // reply false if log doesn't contain an entry at prevLogIndex whose term matches prevLogTerm
-		reply.ConflictTerm = myTerm                     // this is the term of my conflicting log entry
+		reply.ConflictTerm = myTerm                     // this is the term of my conflicting log entry (this term must be older otherwise return false already)
 		reply.ConflictIndex = rf.findFirstIndex(myTerm) // find the index for the first log entry with the conflicting term
 		return
 	}

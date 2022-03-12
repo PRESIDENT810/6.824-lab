@@ -255,10 +255,71 @@ func (rf *Raft) findNextIndex(args *AppendEntriesArgs, reply *AppendEntriesReply
 	lastMatchedIdx := rf.findLastIndex(reply.ConflictTerm)
 
 	// case 1: exists an entry in its log with ConflictTerm
+	// INDEX:    0 1 2 3 4 5 6 7
+	// =========================
+	// LEADER:   1 1 1 2 2 3 3 3
+	// FOLLOWER: 1 1 1 2 2 2
+	// prevLogIndex = 5
+	// ConflictTerm = 2, ConflictIndex = 2
+	// Leader has logs with conflict term 2, so maybe followers has all correct logs with term 2 (index = 3, 4),
+	// but for some reason follower receives more logs with term 2 (index = 5)
+	// We need to start with the last correct log with term 2, and next index is 5,
+	// then follower will replicate log with index = 5, 6, 7
 	if lastMatchedIdx != -1 {
 		return lastMatchedIdx + 1
 	} else {
 		// case 2: no entry with ConflictTerm (either ConflictTerm is none or I don't have a log entry with ConflictTerm)
+		// INDEX:    0 1 2 3 4 5 6 7
+		// =========================
+		// LEADER:   1 1 1 2 2 4 4 4
+		// FOLLOWER: 1 1 1 3 3 3
+		// prevLogIndex = 5
+		// ConflictTerm = 3, ConflictIndex = 3
+		// Leader doesn't have a log with conflict term 3, so we need to start with conflict index, which is follower's
+		// first log index of conflict term 3. If before this point follower got the correct log (index = 0, 1, 2), with
+		// our next index = conflict index (3), follower will replicate log with index = 3, 4, 5, 6, 7
 		return reply.ConflictIndex
 	}
+}
+
+//
+// find the last index of the given term in a raft instance's log
+// don't use lock here or everything will be fucked up
+//
+func (rf *Raft) findLastIndex(term int) int {
+	if term == -2 { // term is none
+		return -1
+	}
+
+	for i := len(rf.logs) - 1; i >= 0; i-- {
+		// sometimes I don't have a log in this term, for example:
+		// INDEX:    0 1 2 3 4 5 6 7
+		// =========================
+		// LEADER:   1 1 1 2 2 4 4 4
+		// FOLLOWER: 1 1 1 3 3 3
+		// with prevLogIndex=5, so he doesn't have log entry with term 4, and he replies me with ConflictTerm 3 and ConflictIndex 3
+		// I cannot find any log entry with term=3, so I have to start from ConflictIndex, hopefully the handler got correct logs before ConflictIndex
+		// For handler, log entries before ConflictIndex might be correct (because log entries with index >= ConflictIndex must be wrong)
+		// So we start trying from ConflictIndex, if that does not match, I will receive false in consequent AppendEntries RPC
+		// and I will try again from older log entries
+		if rf.logs[i].Term == term {
+			return i
+		}
+	}
+	//panic("findLastIndex fucked up!!!")
+	return -1 // if we return -1, then this is really fucked up
+}
+
+//
+// find the first index of the given term in a raft instance's log
+// don't use lock here or everything will be fucked up
+//
+func (rf *Raft) findFirstIndex(term int) int {
+	for i := 0; i < len(rf.logs); i++ {
+		if rf.logs[i].Term == term {
+			return i
+		}
+	}
+	//panic("findFirstIndex fucked up!!!")
+	return -1 // if we return -1, then this is really fucked up
 }
