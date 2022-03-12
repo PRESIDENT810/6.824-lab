@@ -1,5 +1,6 @@
 package raft
 
+// RequestVoteArgs
 //
 // RequestVote RPC arguments structure.
 // field names must start with capital letters!
@@ -13,6 +14,7 @@ type RequestVoteArgs struct {
 	RPCID int64 // identifier for RPC
 }
 
+// RequestVoteReply
 //
 // RequestVote RPC reply structure.
 // field names must start with capital letters!
@@ -25,6 +27,7 @@ type RequestVoteReply struct {
 	Ignore bool
 }
 
+// AppendEntriesArgs
 //
 // AppendEntries RPC arguments structure
 // field names must start with capital letters!
@@ -40,6 +43,7 @@ type AppendEntriesArgs struct {
 	RPCID int64 // identifier for RPC
 }
 
+// AppendEntriesReply
 //
 // AppendEntries RPC reply structure
 // field names must start with capital letters!

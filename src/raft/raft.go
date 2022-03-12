@@ -24,6 +24,7 @@ import (
 import "sync/atomic"
 import "labrpc"
 
+// ApplyMsg
 //
 // as each Raft peer becomes aware that successive log entries are
 // committed, the peer should send an ApplyMsg to the service (or
@@ -62,6 +63,7 @@ type Log struct {
 	Command interface{} // empty interface for the actual command of this log entry
 }
 
+// Raft
 //
 // A Go object implementing a single Raft peer.
 //
@@ -98,6 +100,8 @@ type Raft struct {
 	newestRequestVoteRPCID   []int64
 }
 
+// GetState
+//
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
@@ -111,6 +115,7 @@ func (rf *Raft) GetState() (int, bool) {
 	return term, isleader
 }
 
+// Start
 //
 // the service using Raft (e.g. a k/v server) wants to start
 // agreement on the next command to be appended to Raft's log. if this
@@ -141,6 +146,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	return index, term, isLeader
 }
 
+// Kill
 //
 // the tester doesn't halt goroutines created by Raft after each test,
 // but it does call the Kill() method. your code can use killed() to
@@ -162,6 +168,7 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
+// Make
 //
 // the service or tester wants to create a Raft server. the ports
 // of all the Raft servers (including this one) are in peers[]. this
@@ -214,6 +221,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	return rf
 }
 
+// MainRoutine
 //
 // the main raft routine periodically checks its state
 // if raft is a follower or candidate (not sure about this) with election timeout,

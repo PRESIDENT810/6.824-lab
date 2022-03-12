@@ -6,6 +6,7 @@ import (
 )
 import "labgob"
 
+// PersistentState
 //
 // struct for persistent states of a raft instance
 // when saving raft's state, encode these attributes via gob

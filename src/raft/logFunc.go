@@ -15,6 +15,8 @@ const (
 	showPersist = false
 )
 
+// Printf
+//
 // wrapper of fmt.Printf, if showLog is false, then don't print log about states
 func Printf(format string, a ...interface{}) {
 	if showLog {
@@ -22,6 +24,8 @@ func Printf(format string, a ...interface{}) {
 	}
 }
 
+// PrintLock
+//
 // wrapper of fmt.Printf, if showLock is false, then don't print log about locks
 func PrintLock(format string, a ...interface{}) {
 	if showLock {
@@ -29,6 +33,8 @@ func PrintLock(format string, a ...interface{}) {
 	}
 }
 
+// PrintPersist
+//
 // wrapper of fmt.Printf, if showPersist is false, then don't print log about persister
 func PrintPersist(format string, a ...interface{}) {
 	if showPersist {
@@ -36,6 +42,7 @@ func PrintPersist(format string, a ...interface{}) {
 	}
 }
 
+// LogServerStates
 //
 // log server info
 //
@@ -57,6 +64,7 @@ func (rf *Raft) LogServerStates() {
 	Printf("=======================================================================================================\n\n")
 }
 
+// LogAppendEntriesReceive
 //
 // log AppendEntries RPC info on receiver side
 //
@@ -68,6 +76,7 @@ func (rf *Raft) LogAppendEntriesReceive(args *AppendEntriesArgs, reply *AppendEn
 	rf.LogServerStates()
 }
 
+// LogRequestVoteReceive
 //
 // log RequestVote RPC info on sender side
 //
@@ -79,6 +88,7 @@ func (rf *Raft) LogRequestVoteReceive(args *RequestVoteArgs, reply *RequestVoteR
 	rf.LogServerStates()
 }
 
+// LogAppendEntriesSend
 //
 // log AppendEntries RPC info on sender side
 //
@@ -90,6 +100,7 @@ func (rf *Raft) LogAppendEntriesSend(sender, receiver int, args *AppendEntriesAr
 	rf.LogServerStates()
 }
 
+// LogRequestVoteSend
 //
 // log RequestVote RPC info on sender side
 //
@@ -101,6 +112,7 @@ func (rf *Raft) LogRequestVoteSend(sender, receiver int, args *RequestVoteArgs, 
 	rf.LogServerStates()
 }
 
+// LogReadPersistState
 //
 // log ReadPersist
 //
@@ -110,6 +122,7 @@ func (rf *Raft) LogReadPersistState(ps *PersistentState) {
 	PrintPersist("[server%d] calls ReadPersist from persister\ncurrentTerm: %d, voteFor: %d, logs: %v\n\n\n", rf.me, ps.CurrentTerm, ps.VoteFor, ps.Logs)
 }
 
+// LogPersistState
 //
 // log Persist
 //

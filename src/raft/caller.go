@@ -6,6 +6,7 @@ import (
 
 var serialNumber int64 = 0
 
+// SendHeartbeats
 //
 // this function send AppendEntries RPCs to all its peers with no log
 // it send RPC request for each server in a separate goroutine and handle RPC reply in a same goroutine;
@@ -38,6 +39,7 @@ func (rf *Raft) SendHeartbeats(term int) {
 	}
 }
 
+// RequestReplication
 //
 // this function send AppendEntries RPCs to all its peers with logs that need to be replicated
 // it send RPC request for each server in a separate goroutine and handle RPC reply in a same goroutine;
@@ -73,6 +75,7 @@ func (rf *Raft) RequestReplication(term int) {
 	}
 }
 
+// SendAppendEntries
 //
 // send AppendEntries RPC to a single server and handle the reply
 //
@@ -136,6 +139,7 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 	}
 }
 
+// RunElection
 //
 // as a raft instance becomes a candidate, it asks all its peers to vote after it votes for itself
 // it send RPC request for each server in a separate goroutine and handle RPC reply in a same goroutine;
@@ -175,6 +179,7 @@ func (rf *Raft) RunElection(term int) {
 	}
 }
 
+// SendRequestVote
 //
 // send RequestVote RPC to a single server and handle the reply
 // also signal the voteDone cond var

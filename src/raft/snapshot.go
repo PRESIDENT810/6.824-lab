@@ -1,5 +1,6 @@
 package raft
 
+// CondInstallSnapshot
 //
 // A service wants to switch to snapshot.  Only do so if Raft hasn't
 // have more recent info since it communicate the snapshot on applyCh.
@@ -11,6 +12,7 @@ func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int,
 	return true
 }
 
+// Snapshot
 //
 // the service says it has created a snapshot that has
 // all info up to and including index. this means the

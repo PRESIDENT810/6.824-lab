@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// SetApplier
 //
 // the applier can be awaken by a cond var; every time there are logs are committed,
 // you should awake the cond var and tell this function to apply logs
@@ -30,6 +31,7 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 	}
 }
 
+// SetCommitter
 //
 // only called when someone becomes leader
 // the committer periodically check the following conditions to determine whether the leader's commitIndex should be incremented
@@ -102,6 +104,7 @@ func (rf *Raft) ticker() {
 	}
 }
 
+// ResetTimer
 //
 // reset timer
 //
@@ -111,7 +114,7 @@ func (rf *Raft) ResetTimer() {
 }
 
 //
-// why the fuck go don't have a integer min function???
+// why the fuck go don't have a min function???
 //
 func min(i, j int) int {
 	if i < j {
