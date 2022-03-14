@@ -25,17 +25,74 @@ func (rf *Raft) SendHeartbeats(term int) {
 
 	leaderId := rf.me              // current leader, which is me
 	leaderCommit := rf.commitIndex // last log I committed
-	for idx, _ := range rf.peers {
-		if idx == rf.me {
+	for server, _ := range rf.peers {
+		if server == rf.me {
 			continue
 		}
-		prevLogIndex := rf.nextIndex[idx] - 1     // index of log entry immediately preceding new ones (nextIndex-1)
-		prevLogTerm := rf.logs[prevLogIndex].Term // term of prevLogIndex entry
-		entries := make([]Log, 0)                 // heartbeat should carry no log, if not match, resending will carry logs
-		id := atomic.AddInt64(&serialNumber, 1)   // get the RPC's serial number
-		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit, id}
+		prevLogIndex := rf.nextIndex[server] - 1 // index of log entry immediately preceding new ones (nextIndex-1)
+		var prevLogTerm int
+
+		// we need to know the prevLogTerm, but the log entry of prefLogIndex may be already compacted in snapshot
+		if prevLogIndex <= rf.lastIncludedIndex {
+			// actual index:            0 1 2
+			// log:         0 1 2 3 4 5 6 7 8
+			// snapshot:    |---------|
+			// prevLogIndex:      |
+			// nextIndex:           |
+			// entries:             |-------|
+			// lastIncludedIndex = 5, prevLogTerm = 3, leader has already discarded the next log entry that it needs to send
+			// we don't know what's the term of prevLogIndex since it is in the snapshot, so we just install snapshot and return
+
+			// Note: if prevLogIndex == lastIncludedIndex, we still need to install snapshot
+			// this is because rf.logs might be empty, and the consequent handling will be troublesome
+			// thus we just install snapshot to make it easier
+
+			snapshot := make([]byte, len(rf.snapshot))
+			copy(snapshot, rf.snapshot)
+
+			args := InstallSnapshotArgs{
+				term,
+				leaderId,
+				rf.lastIncludedIndex,
+				rf.lastIncludeTerm,
+				snapshot,
+				atomic.AddInt64(&serialNumber, 1),
+			}
+			reply := InstallSnapshotReply{}
+			go rf.SendInstallSnapshot(server, args, reply)
+			return
+		} else { // prevLogIndex > rf.lastIncludedIndex
+			// actual index:            0 1 2
+			// log:         0 1 2 3 4 5 6 7 8
+			// snapshot:    |---------|
+			// prevLogIndex:            |
+			// nextIndex:                 |
+			// entries:                   |-|
+			// lastIncludedIndex = 5, prevLogTerm = 6, leader still has the next log entry that it needs to send
+			// the actual index of logs to send is 6-5 = 1
+
+			// Node: if prevLogIndex > rf.lastIncludedIndex, rf.logs will never be empty
+			// because prefLogIndex < len(rf.logs) (before compaction) = lastIncludedIndex+len(rf.logs)+1 (after compaction)
+			// if rf.logs is empty, len(rf.logs) == 0, prefLogIndex < lastIncludedIndex+1, prefLogIndex <= lastIncludedIndex
+			// and this case is already handled
+
+			actualIndex := prevLogIndex - rf.lastIncludedIndex - 1
+			prevLogTerm = rf.logs[actualIndex].Term // term of prevLogIndex entry
+		}
+
+		entries := make([]Log, 0)               // heartbeat should carry no log, if not match, resending will carry logs
+		id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
+		args := AppendEntriesArgs{
+			term,
+			leaderId,
+			prevLogIndex,
+			prevLogTerm,
+			entries,
+			leaderCommit,
+			id,
+		}
 		reply := AppendEntriesReply{}
-		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
+		go rf.SendAppendEntries(server, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
 	}
 }
 
@@ -58,20 +115,81 @@ func (rf *Raft) RequestReplication(term int) {
 
 	leaderId := rf.me              // current leader, which is me
 	leaderCommit := rf.commitIndex // last log I committed
-	for idx, _ := range rf.peers {
-		if idx == leaderId {
+	for server, _ := range rf.peers {
+		if server == leaderId {
 			continue // I already appended this shit
 		}
-		entries := rf.logs[rf.nextIndex[idx]:] // nextIndex's possible maximal value is len(rf.logs), since we just append a new log, it won't exceed bound
+		nextIndex := rf.nextIndex[server]
+		actualNextIndex := nextIndex - rf.lastIncludedIndex - 1
+		prevLogIndex := rf.nextIndex[server] - 1 // index of log entry immediately preceding new ones (nextIndex-1)
+		prevLogTerm := -1
+		var entries []Log
+
+		// we need to know the prevLogTerm, but the log entry of prefLogIndex may be already compacted in snapshot
+		if prevLogIndex <= rf.lastIncludedIndex {
+			// actual index:            0 1 2
+			// log:         0 1 2 3 4 5 6 7 8
+			// snapshot:    |---------|
+			// prevLogIndex:      |
+			// nextIndex:           |
+			// entries:             |-------|
+			// lastIncludedIndex = 5, prevLogTerm = 3, leader has already discarded the next log entry that it needs to send
+			// we don't know what's the term of prevLogIndex since it is in the snapshot, and we cannot send log of index 4, 5
+			// so we just install snapshot and return
+
+			// Note: if prevLogIndex == lastIncludedIndex, we still need to install snapshot
+			// this is because rf.logs might be empty, and the consequent handling will be troublesome
+			// thus we just install snapshot to make it easier
+
+			args := InstallSnapshotArgs{
+				term,
+				leaderId,
+				rf.lastIncludedIndex,
+				rf.lastIncludeTerm,
+				rf.snapshot,
+				atomic.AddInt64(&serialNumber, 1),
+			}
+			reply := InstallSnapshotReply{}
+			go rf.SendInstallSnapshot(server, args, reply)
+			return
+		} else { // prevLogIndex > rf.lastIncludedIndex
+			// actual index:            0 1 2
+			// log:         0 1 2 3 4 5 6 7 8
+			// snapshot:    |---------|
+			// prevLogIndex:            |
+			// nextIndex:                 |
+			// entries:                   |-|
+			// lastIncludedIndex = 5, prevLogTerm = 6, leader still has the next log entry that it needs to send
+			// the actual index of logs to send is 6-5 = 1
+
+			// Node: if prevLogIndex > rf.lastIncludedIndex, rf.logs will never be empty
+			// because prefLogIndex < len(rf.logs) (before compaction) = lastIncludedIndex+len(rf.logs)+1 (after compaction)
+			// if rf.logs is empty, len(rf.logs) == 0, prefLogIndex < lastIncludedIndex+1, prefLogIndex <= lastIncludedIndex
+			// and this case is already handled
+
+			actualIndex := prevLogIndex - rf.lastIncludedIndex - 1
+			prevLogTerm = rf.logs[actualIndex].Term // term of prevLogIndex entry
+			actualNextIndex = actualIndex + 1
+			nextIndex = actualIndex + rf.lastIncludedIndex + 1
+		}
+
+		entries = rf.logs[actualNextIndex:] // nextIndex's possible maximal value is len(rf.logs), since we just append a new log, it won't exceed bound
 		entriesCopy := make([]Log, len(entries))
 		copy(entriesCopy, entries)
-		prevLogIndex := rf.nextIndex[idx] - 1     // index of log entry immediately preceding new ones (nextIndex-1)
-		prevLogTerm := rf.logs[prevLogIndex].Term // term of prevLogIndex entry
-		id := atomic.AddInt64(&serialNumber, 1)   // get the RPC's serial number
-		rf.newestAppendEntriesRPCID[idx] = id
-		args := AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entriesCopy, leaderCommit, id}
+
+		id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
+		rf.newestAppendEntriesRPCID[server] = id
+		args := AppendEntriesArgs{
+			term,
+			leaderId,
+			prevLogIndex,
+			prevLogTerm,
+			entriesCopy,
+			leaderCommit,
+			id,
+		}
 		reply := AppendEntriesReply{}
-		go rf.SendAppendEntries(idx, args, reply) // pass a copy instead of reference (I think args and reply may lost after it returns)
+		go rf.SendAppendEntries(server, args, reply) // pass a copy instead of reference (I think args and reply may lose after it returns)
 	}
 }
 
@@ -106,7 +224,7 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		rf.currentTerm = reply.Term // set currentTerm = T
 		rf.voteFor = -1             // reset voteFor
 		rf.role = FOLLOWER          // convert to follower
-		rf.persist()                // currentTerm and voteFor are changed, so I need to save my states
+		rf.persist(nil)             // currentTerm and voteFor are changed, so I need to save my states
 		rf.ResetTimer()
 		return
 	}
@@ -120,20 +238,85 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		}
 	}
 
-	if rf.matchIndex[server] != len(rf.logs)-1 { // if not matched, keep sending AppendEntries to force it to match
+	// actual index:            0 1 2
+	// log:         0 1 2 3 4 5 6 7 8
+	// matchIndex:                  |
+	// len(rf.logs) = 3, matchIndex = 8, lastIncludedIndex = 5
+	// if matchIndex == len(rf.logs)+lastIncludedIndex, it means that all logs are update to date
+	if rf.matchIndex[server] != len(rf.logs)+rf.lastIncludedIndex { // if not matched, keep sending AppendEntries to force it to match
 		// since this is re-sending, you need to reset you arguments since they might change
 		term := rf.currentTerm // my term
 		leaderId := rf.me      // current leader, which is me
 		nextIndex := rf.nextIndex[server]
-		entries := rf.logs[nextIndex:] // send the log entry with nextIndex, since follower doesn't match, nextIndex won't exceed len(rf.log)
+		actualNextIndex := nextIndex - rf.lastIncludedIndex - 1
+		prevLogIndex := nextIndex - 1
+		actualIndex := prevLogIndex - rf.lastIncludedIndex - 1
+		prevLogTerm := rf.logs[actualIndex].Term
+		var entries []Log
+
+		// we need to know the prevLogTerm, but the log entry of prefLogIndex may be already compacted in snapshot
+		if prevLogIndex <= rf.lastIncludedIndex {
+			// actual index:            0 1 2
+			// log:         0 1 2 3 4 5 6 7 8
+			// snapshot:    |---------|
+			// prevLogIndex:      |
+			// nextIndex:           |
+			// entries:             |-------|
+			// lastIncludedIndex = 5, prevLogTerm = 3, leader has already discarded the next log entry that it needs to send
+			// we don't know what's the term of prevLogIndex since it is in the snapshot, and we cannot send log of index 4, 5
+			// so we just install snapshot and return
+
+			// Note: if prevLogIndex == lastIncludedIndex, we still need to install snapshot
+			// this is because rf.logs might be empty, and the consequent handling will be troublesome
+			// thus we just install snapshot to make it easier
+
+			args := InstallSnapshotArgs{
+				term,
+				leaderId,
+				rf.lastIncludedIndex,
+				rf.lastIncludeTerm,
+				rf.snapshot,
+				atomic.AddInt64(&serialNumber, 1),
+			}
+			reply := InstallSnapshotReply{}
+			go rf.SendInstallSnapshot(server, args, reply)
+			return
+		} else { // prevLogIndex > rf.lastIncludedIndex
+			// actual index:            0 1 2
+			// log:         0 1 2 3 4 5 6 7 8
+			// snapshot:    |---------|
+			// prevLogIndex:            |
+			// nextIndex:                 |
+			// entries:                   |-|
+			// lastIncludedIndex = 5, prevLogTerm = 6, leader still has the next log entry that it needs to send
+			// the actual index of logs to send is 6-5 = 1
+
+			// Node: if prevLogIndex > rf.lastIncludedIndex, rf.logs will never be empty
+			// because prefLogIndex < len(rf.logs) (before compaction) = lastIncludedIndex+len(rf.logs)+1 (after compaction)
+			// if rf.logs is empty, len(rf.logs) == 0, prefLogIndex < lastIncludedIndex+1, prefLogIndex <= lastIncludedIndex
+			// and this case is already handled
+
+			actualIndex := prevLogIndex - rf.lastIncludedIndex - 1
+			prevLogTerm = rf.logs[actualIndex].Term // term of prevLogIndex entry
+			actualNextIndex = actualIndex + 1
+			nextIndex = actualIndex + rf.lastIncludedIndex + 1
+		}
+
+		entries = rf.logs[actualNextIndex:] // send the log entry with nextIndex, since follower doesn't match, nextIndex won't exceed len(rf.log)
 		entriesCopy := make([]Log, len(entries))
 		copy(entriesCopy, entries)
 		leaderCommit := rf.commitIndex
-		prevLogIndex := nextIndex - 1
-		prevLogTerm := rf.logs[prevLogIndex].Term
 		id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
 		rf.newestRequestVoteRPCID[server] = id
-		args = AppendEntriesArgs{term, leaderId, prevLogIndex, prevLogTerm, entriesCopy, leaderCommit, id}
+		args = AppendEntriesArgs{
+			term,
+			leaderId,
+			prevLogIndex,
+			prevLogTerm,
+			entriesCopy,
+			leaderCommit,
+			id,
+		}
 		reply = AppendEntriesReply{}
 		go rf.SendAppendEntries(server, args, reply) // resend AppendEntries RPC
 	}
@@ -150,10 +333,22 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 func (rf *Raft) RunElection(term int) {
 
 	//rf.mu.Lock()                              // lock raft instance to prepare the RPC arguments
-	rf.ResetTimer()                           // reset the election timer because when starting an election
-	candidateId := rf.me                      // candidate id, which is me!
-	lastLogIndex := len(rf.logs) - 1          // index of my last log entry
-	lastLogTerm := rf.logs[lastLogIndex].Term // term of my last log entry
+	rf.ResetTimer()      // reset the election timer because when starting an election
+	candidateId := rf.me // candidate id, which is me!
+
+	var lastLogIndex, lastLogTerm int
+	if len(rf.logs) == 0 {
+		// actual index:              |
+		// log:         0 1 2 3 4 5 6
+		lastLogIndex = rf.lastIncludedIndex
+		lastLogTerm = rf.lastIncludeTerm
+	} else {
+		// actual index:              0 1
+		// log:         0 1 2 3 4 5 6 7 8
+		lastLogIndex = len(rf.logs) - 1          // index of my last log entry
+		lastLogTerm = rf.logs[lastLogIndex].Term // term of my last log entry
+	}
+
 	//rf.mu.Unlock()                            // unlock raft when RPC arguments are prepared
 
 	//electionDone := make(chan int, 1)
@@ -173,7 +368,12 @@ func (rf *Raft) RunElection(term int) {
 		}
 		id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
 		rf.newestRequestVoteRPCID[idx] = id
-		args := RequestVoteArgs{term, candidateId, lastLogIndex, lastLogTerm, id}
+		args := RequestVoteArgs{term,
+			candidateId,
+			lastLogIndex,
+			lastLogTerm,
+			id,
+		}
 		reply := RequestVoteReply{}
 		go rf.SendRequestVote(idx, args, reply) // send RPC to each server
 	}
@@ -218,7 +418,7 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 		rf.currentTerm = reply.Term // update my current term
 		rf.voteFor = -1             // reset my voteFor
 		rf.role = FOLLOWER          // convert to follower
-		rf.persist()                // currentTerm and voteFor are changed, so I need to save my states
+		rf.persist(nil)             // currentTerm and voteFor are changed, so I need to save my states
 		rf.ResetTimer()
 		return
 	}
@@ -245,6 +445,11 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 	}
 }
 
+const (
+	NoEntryWithGivenTerm = -3
+	ConflictTermIsNone   = -2
+)
+
 //
 // this function find the appropriate nextIndex a raft instance should set according to AppendEntries RPC's reply
 // Note: if rf.nextIndex[server]-1 == args.PrevLogIndex is not satisfied, which means in other RPCs nextIndex is already reset
@@ -252,32 +457,68 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 //
 func (rf *Raft) findNextIndex(args *AppendEntriesArgs, reply *AppendEntriesReply, server int) int {
 
+	// lastMatchedIdx could be one of the followings:
+	// ConflictTermIsNone (-2)
+	// NoEntryWithGivenTerm (-3)
+	// a valid index (between 0 and len(rf.logs)-1)
 	lastMatchedIdx := rf.findLastIndex(reply.ConflictTerm)
 
-	// case 1: exists an entry in its log with ConflictTerm
-	// INDEX:    0 1 2 3 4 5 6 7
-	// =========================
-	// LEADER:   1 1 1 2 2 3 3 3
-	// FOLLOWER: 1 1 1 2 2 2
-	// prevLogIndex = 5
-	// ConflictTerm = 2, ConflictIndex = 2
-	// Leader has logs with conflict term 2, so maybe followers has all correct logs with term 2 (index = 3, 4),
-	// but for some reason follower receives more logs with term 2 (index = 5)
-	// We need to start with the last correct log with term 2, and next index is 5,
-	// then follower will replicate log with index = 5, 6, 7
-	if lastMatchedIdx != -1 {
-		return lastMatchedIdx + 1
-	} else {
-		// case 2: no entry with ConflictTerm (either ConflictTerm is none or I don't have a log entry with ConflictTerm)
+	if lastMatchedIdx != ConflictTermIsNone && lastMatchedIdx != NoEntryWithGivenTerm {
+		// case 4: I have this term, and it's not in snapshot
 		// INDEX:    0 1 2 3 4 5 6 7
 		// =========================
-		// LEADER:   1 1 1 2 2 4 4 4
-		// FOLLOWER: 1 1 1 3 3 3
+		// LEADER:   1 1 1 2 2 3 3 3
+		// FOLLOWER: 1 1 1 2 2 2
+		// prevLogIndex = 5
+		// ConflictTerm = 2, ConflictIndex = 2
+		// Leader has logs with conflict term 2, so hopefully followers has all correct logs up to term 2 (index = 3, 4),
+		// but for some reason follower receives more logs with term 2 (index = 5)
+		// We need to start with the last correct log with term 2, and next index is 5,
+		// then follower will replicate log with index = 5, 6, 7
+		return lastMatchedIdx + 1
+	} else if lastMatchedIdx == ConflictTermIsNone {
+		// case 1: follower doesn't have this term
+		// INDEX:    0 1 2 3 4 5 6 7
+		// =========================
+		// LEADER:       1 2 2 4 4 4
+		// Snapshot: 1 1
+		// FOLLOWER: 1 1 1 2
 		// prevLogIndex = 5
 		// ConflictTerm = 3, ConflictIndex = 3
-		// Leader doesn't have a log with conflict term 3, so we need to start with conflict index, which is follower's
-		// first log index of conflict term 3. If before this point follower got the correct log (index = 0, 1, 2), with
+		// Leader doesn't have a log with conflict term 3, so we need to start with conflict index, which will be follower's
+		// log length (4). In this case, nextIndex = 4, prevLogIndex = 3
+		// If prevLogIndex & prevLogTerm matches follower's, follower will hopefully replicate log with index = 4, 5, 6, 7
+		return reply.ConflictIndex
+	} else { // lastMatchedIdx == NoEntryWithGivenTerm
+		// case 2: I really don't have this term
+		// INDEX:    0 1 2 3 4 5 6 7
+		// =========================
+		// LEADER:       1 2 2 4 4 4
+		// Snapshot: 1 1
+		// FOLLOWER: 1 1 1 3 3 3
+		// prevLogIndex = 5, ConflictTerm = 3, ConflictIndex = 3
+		// Leader doesn't have a log with conflict term 3, so we need to start with ConflictIndex, which will be follower's
+		// first log index of conflict term 3 (3). If before this point follower got the correct log (index = 0, 1, 2), with
 		// our next index = conflict index (3), follower will replicate log with index = 3, 4, 5, 6, 7
+
+		// Another possibility
+		// INDEX:    0 1 2 3 4 5 6 7
+		// =========================
+		// LEADER:               4 4
+		// Snapshot: 1 1 1 2 2 4
+		// FOLLOWER: 1 1 1 3 3 3
+		// same as case 3, use ConflictIndex as nextIndex, eventually AppendEntries RPC will install snapshot
+
+		// case 3: I have this term, but it's in my snapshot
+		// INDEX:    0 1 2 3 4 5 6 7
+		// =========================
+		// LEADER:             4 4 4
+		// Snapshot: 1 1 1 2 3
+		// FOLLOWER: 1 1 1 3 3 3
+		// prevLogIndex = 5, ConflictTerm = 3, ConflictIndex = 3
+		// Leader could have this log entry if it's not in snapshot. In this case we still set nextIndex to ConflictIndex,
+		// because when doing so, AppendEntries RPC will notice that I don't have log entry at ConflictIndex (3),
+		// so I will just install snapshot
 		return reply.ConflictIndex
 	}
 }
@@ -287,39 +528,110 @@ func (rf *Raft) findNextIndex(args *AppendEntriesArgs, reply *AppendEntriesReply
 // don't use lock here or everything will be fucked up
 //
 func (rf *Raft) findLastIndex(term int) int {
-	if term == -2 { // term is none
-		return -1
+	if term == ConflictTermIsNone { // follower doesn't have this term
+		// case 1: follower doesn't have this term
+		// INDEX:    0 1 2 3 4 5 6 7
+		// =========================
+		// LEADER:       1 2 2 4 4 4
+		// Snapshot: 1 1
+		// FOLLOWER: 1 1 1 2
+		// prevLogIndex:       |
+		// with prevLogIndex=5, follower doesn't have log entry here, so we should return ConflictTermIsNone
+		// Following code should set nextIndex to ConflictIndex, which is the length of follower's logs (4)
+		// AppendEntries RPC will handle when log entry at nextIndex is already compacted, so we don't need to worry about it here
+		// Return value is ConflictTermIsNone
+		return ConflictTermIsNone
 	}
 
 	for i := len(rf.logs) - 1; i >= 0; i-- {
-		// sometimes I don't have a log in this term, for example:
+		// case 2: I really don't have this term
 		// INDEX:    0 1 2 3 4 5 6 7
 		// =========================
-		// LEADER:   1 1 1 2 2 4 4 4
+		// LEADER:       1 2 2 4 4 4
+		// Snapshot: 1 1
 		// FOLLOWER: 1 1 1 3 3 3
-		// with prevLogIndex=5, so he doesn't have log entry with term 4, and he replies me with ConflictTerm 3 and ConflictIndex 3
+		// prevLogIndex:       |
+		// with prevLogIndex=5, so follower doesn't have log entry with term 4, and he replies me with ConflictTerm 3 and ConflictIndex 3
 		// I cannot find any log entry with term=3, so I have to start from ConflictIndex, hopefully the handler got correct logs before ConflictIndex
 		// For handler, log entries before ConflictIndex might be correct (because log entries with index >= ConflictIndex must be wrong)
 		// So we start trying from ConflictIndex, if that does not match, I will receive false in consequent AppendEntries RPC
 		// and I will try again from older log entries
+		// In this case we should return NoEntryWithGivenTerm, and the following code should set nextIndex to ConflictIndex (3)
+
+		// Another possibility
+		// INDEX:    0 1 2 3 4 5 6 7
+		// =========================
+		// LEADER:               4 4
+		// Snapshot: 1 1 1 2 2 4
+		// FOLLOWER: 1 1 1 3 3 3
+		// prevLogIndex:       |
+		// with prevLogIndex=5, so follower doesn't have log entry with term 4, and he replies me with ConflictTerm 3 and ConflictIndex 3
+		// Same as case 3, we return NoEntryWithGivenTerm, and later we will use nextIndex = ConflictIndex, which is 3
+		// and eventually AppendEntries RPC will notice we don't have log entry with index 3, then it will install snapshot
+
+		// Return value is NoEntryWithGivenTerm
+
+		// case 3: I have this term, but it's in my snapshot
+		// INDEX:    0 1 2 3 4 5 6 7
+		// =========================
+		// LEADER:             4 4 4
+		// Snapshot: 1 1 1 2 3
+		// FOLLOWER: 1 1 1 3 3 3
+		// prevLogIndex:       |
+		// with prevLogIndex=5, so he doesn't have log entry with term 4, and he replies me with ConflictTerm 3 and ConflictIndex 3
+		// I had a log entry with term 3, but now it's in snapshot
+		// In this case, ConflictTerm = 3, ConflictIndex=3 (first log entry with term=3)
+		// We just return NoEntryWithGivenTerm, let the following code to determine should we install snapshot or not
+		// In this case we cannot find log entry with ConflictTerm, so we just return NoEntryWithGivenTerm
+		// Return value is NoEntryWithGivenTerm
+
+		// case 4: I have this term, and it's not in snapshot
+		// INDEX:    0 1 2 3 4 5 6 7
+		// Actual:           0 1 2 3
+		// =========================
+		// LEADER:           3 4 4 4
+		// Snapshot: 1 1 1 2
+		// FOLLOWER: 1 1 1 3 3 3
+		// prevLogIndex:       |
+		// Then I should return index = 4 (actual index = 0, lastIncludedIndex = 3)
+		// Return value is a valid index
 		if rf.logs[i].Term == term {
-			return i
+			return i + rf.lastIncludedIndex + 1
 		}
 	}
-	//panic("findLastIndex fucked up!!!")
-	return -1 // if we return -1, then this is really fucked up
+
+	return NoEntryWithGivenTerm // if we return NoEntryWithGivenTerm, we don't have this term
 }
 
+// SendInstallSnapshot
 //
-// find the first index of the given term in a raft instance's log
-// don't use lock here or everything will be fucked up
+// send InstallSnapshot RPC command a follower to replicate leader's snapshot
 //
-func (rf *Raft) findFirstIndex(term int) int {
-	for i := 0; i < len(rf.logs); i++ {
-		if rf.logs[i].Term == term {
-			return i
-		}
+func (rf *Raft) SendInstallSnapshot(server int, args InstallSnapshotArgs, reply InstallSnapshotReply) {
+	if rf.killed() { // if raft instance is dead, then no need to sending RPCs
+		return
 	}
-	//panic("findFirstIndex fucked up!!!")
-	return -1 // if we return -1, then this is really fucked up
+
+	success := rf.peers[server].Call("Raft.InstallSnapshot", &args, &reply)
+
+	if !success { // RPC failed
+		Printf("InstallSnapshot from LEADER %d to FOLLOWER %d [RPC %d] failed\n", rf.me, server, args.RPCID)
+		return
+	}
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	if args.Term != rf.currentTerm || rf.role != LEADER { // a long winding path of blood, sweat, tears and despair
+		return
+	}
+
+	if reply.Term > rf.currentTerm { // I should no longer be the leader since my term is too old
+		rf.currentTerm = reply.Term // set currentTerm = T
+		rf.voteFor = -1             // reset voteFor
+		rf.role = FOLLOWER          // convert to follower
+		rf.persist(nil)             // currentTerm and voteFor are changed, so I need to save my states
+		rf.ResetTimer()
+		return
+	}
 }

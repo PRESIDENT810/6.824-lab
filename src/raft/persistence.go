@@ -16,6 +16,9 @@ type PersistentState struct {
 	CurrentTerm int
 	VoteFor     int
 	Logs        []Log
+
+	LastIncludeTerm   int
+	LastIncludedIndex int
 }
 
 //
@@ -23,18 +26,18 @@ type PersistentState struct {
 // where it can later be retrieved after a crash and restart.
 // see paper's Figure 2 for a description of what should be persistent.
 //
-func (rf *Raft) persist() {
+func (rf *Raft) persist(snapshot []byte) {
 	buffer := new(bytes.Buffer)
 	encoder := labgob.NewEncoder(buffer)
 	logs := make([]Log, len(rf.logs))
 	copy(logs, rf.logs)
-	ps := PersistentState{rf.currentTerm, rf.voteFor, logs}
+	ps := PersistentState{rf.currentTerm, rf.voteFor, logs, rf.lastIncludeTerm, rf.lastIncludedIndex}
 	err := encoder.Encode(ps)
 	if err != nil {
 		log.Fatal("encode error:", err)
 	}
 	data := buffer.Bytes()
-	rf.persister.SaveRaftState(data)
+	rf.persister.SaveStateAndSnapshot(data, snapshot)
 }
 
 //
@@ -59,6 +62,10 @@ func (rf *Raft) readPersist(data []byte) {
 	rf.currentTerm = ps.CurrentTerm
 	rf.voteFor = ps.VoteFor
 	rf.logs = ps.Logs
+
+	// persistent state for snapshot
+	rf.lastIncludeTerm = ps.LastIncludeTerm
+	rf.lastIncludedIndex = ps.LastIncludedIndex
 
 	// volatile state on all servers
 	rf.commitIndex = 0 // initialized to 0, increases monotonically

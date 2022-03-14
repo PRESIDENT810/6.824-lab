@@ -22,4 +22,25 @@ func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int,
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	// Your code here (2D).
 
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	rf.snapshot = snapshot
+
+	// log         : 0 1 2 3 4 5 6 7 8
+	// ActualIndex:              0 1 2
+	// Snapshot:     |---------|
+	// index:                      |
+	// index = 7, lastIncludedIndex = 5, so actualIndex should be index-lastIncludedIndex-1
+	actualIndex := index - rf.lastIncludedIndex - 1
+	rf.lastIncludeTerm = rf.logs[actualIndex].Term
+
+	// update lastIncludedIndex and lastIncludeTerm
+	rf.lastIncludedIndex = index
+
+	// trim my log
+	rf.logs = rf.logs[actualIndex+1:]
+
+	// persist
+	rf.persist(snapshot)
 }

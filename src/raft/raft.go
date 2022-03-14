@@ -89,6 +89,12 @@ type Raft struct {
 	nextIndex  []int // indices of the next log I should send to each follower, volatile state for leader only
 	matchIndex []int // indices of the last log that matches to each follower, volatile state for leader only
 
+	// for snapshot
+	lastIncludeTerm   int // last included term of snapshot
+	lastIncludedIndex int // last included index of snapshot
+
+	snapshot []byte // raw bytes of the snapshot
+
 	// extra attributes I might need later
 	role             int       // 0 for LEADER; 1 for CANDIDATE; 2 for FOLLOWER
 	electionLastTime time.Time // timestamp when last time heard from a leader
@@ -133,13 +139,20 @@ func (rf *Raft) GetState() (int, bool) {
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	index := len(rf.logs)
+	// log         : 0 1 2 3 4 5 6 7 8 9
+	// ActualIndex:              0 1 2 3
+	// entries:                  |---|
+	// Snapshot:     |---------|
+	// new log:                        |
+	// actualIndex = len(entries) = 3, lastIncludedIndex = 5, index should be 9
+	actualIndex := len(rf.logs)
+	index := actualIndex + rf.lastIncludedIndex + 1
 	term := rf.currentTerm
 	isLeader := rf.role == LEADER
 
 	if isLeader {
 		rf.logs = append(rf.logs, Log{rf.currentTerm, command}) // log to replicate to the cluster
-		rf.persist()                                            // logs are changed, so I need to save my states
+		rf.persist(nil)                                         // logs are changed, so I need to save my states
 		go rf.RequestReplication(rf.currentTerm)
 	}
 
@@ -204,12 +217,18 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	}
 	rf.matchIndex = make([]int, len(peers)) // don't need to initialize now since I'm not a leader on first boot
 
-	// initialized extra attributes I added
+	// initialize attributes for snapshot
+	rf.lastIncludedIndex = -1 // no snapshot at the beginning, so even the first log at index 0 isn't included
+	rf.lastIncludeTerm = -1
+
+	rf.snapshot = nil
+
+	// initialize extra attributes I added
 	rf.role = FOLLOWER // all servers should be followers when starting up
 	rf.ResetTimer()    // initialize the timer
 
 	go rf.ticker()            // set a timer to calculate elapsed time for election
-	go rf.SetApplier(applyCh) // set a applier to apply logs (send through applyCh)
+	go rf.SetApplier(applyCh) // set an applier to apply logs (send through applyCh)
 	go rf.MainRoutine()       // start raft instance's main routine
 
 	// initialize from state persisted before a crash
@@ -246,7 +265,7 @@ func (rf *Raft) MainRoutine() {
 				rf.voteFor = rf.me // vote for myself
 				rf.ResetTimer()
 				rf.RunElection(rf.currentTerm) // if electionExpired is false, it means you elect too fast, wait for the timeout
-				rf.persist()                   // currentTerm and voteFor are changed, so I need to save my states
+				rf.persist(nil)                // currentTerm and voteFor are changed, so I need to save my states
 			}
 			rf.mu.Unlock()
 			time.Sleep(20 * time.Millisecond)

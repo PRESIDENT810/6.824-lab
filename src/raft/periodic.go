@@ -18,9 +18,17 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 			rf.mu.Lock()
 			if rf.lastApplied < rf.commitIndex { // there is log committed but not applied
 				rf.lastApplied++ // now apply the next command
-				command := rf.logs[rf.lastApplied].Command
+				// lastApplied is not the actual index, we need to consider snapshot and find the actual index
+				// INDEX:    0 1 2 3 4 5 6 7
+				// =========================
+				// Actual:         0 1 2 3 4
+				// FOLLOWER:       2 2 2 3 3
+				// Snapshot: 1 1 1
+				// lastApplied:        |
+				// lastActualApplied = lastApplied (5) - lastIncludedIndex (2) - 1 = 2
+				lastActualApplied := rf.lastApplied - rf.lastIncludedIndex - 1
+				command := rf.logs[lastActualApplied].Command
 				rf.mu.Unlock()
-				// TODO: implement snapshot in 2D
 				applyMsg := ApplyMsg{true, command, rf.lastApplied, false, nil, 0, 0}
 				applyCh <- applyMsg
 			} else {
@@ -49,7 +57,15 @@ func (rf *Raft) SetCommitter() {
 			return
 		}
 		// N must not exceed log's bound
-		for N := len(rf.logs) - 1; N > rf.commitIndex; N-- { // check if such N exists
+		// INDEX:    0 1 2 3 4 5 6 7
+		// =========================
+		// Actual:         0 1 2 3 4
+		// FOLLOWER:       2 2 2 3 3
+		// Snapshot: 1 1 1
+		// commitIndex:        |
+		// len(rf.logs) = 5, lastIncludedIndex = 2
+		// commitIndex should be always larger than lastIncludedIndex, since uncommitted log entries shouldn't be persisted
+		for N := len(rf.logs) + rf.lastIncludedIndex; N > (rf.commitIndex); N-- { // check if such N exists
 			replicatedCnt := 1                            // how many servers have replicated this log, initialized to 1 since I already have this log
 			for server, matchIdx := range rf.matchIndex { // count how many server replicated my log at N
 				if server == rf.me { // no need to count me since I already replicated my log
@@ -59,7 +75,8 @@ func (rf *Raft) SetCommitter() {
 					replicatedCnt++ // one more server replicates log at N
 				}
 			}
-			if replicatedCnt > len(rf.peers)/2 && rf.logs[N].Term == rf.currentTerm {
+			actualIndex := N - rf.lastIncludedIndex - 1
+			if replicatedCnt > len(rf.peers)/2 && rf.logs[actualIndex].Term == rf.currentTerm {
 				rf.commitIndex = N
 				break
 			}
