@@ -33,7 +33,7 @@ func (rf *Raft) SendHeartbeats(term int) {
 		var prevLogTerm int
 
 		// we need to know the prevLogTerm, but the log entry of prefLogIndex may be already compacted in snapshot
-		if prevLogIndex <= rf.lastIncludedIndex {
+		if prevLogIndex < rf.lastIncludedIndex {
 			// actual index:            0 1 2
 			// log:         0 1 2 3 4 5 6 7 8
 			// snapshot:    |---------|
@@ -61,6 +61,8 @@ func (rf *Raft) SendHeartbeats(term int) {
 			reply := InstallSnapshotReply{}
 			go rf.SendInstallSnapshot(server, args, reply)
 			return
+		} else if prevLogIndex == rf.lastIncludedIndex {
+			prevLogTerm = rf.lastIncludeTerm
 		} else { // prevLogIndex > rf.lastIncludedIndex
 			// actual index:            0 1 2
 			// log:         0 1 2 3 4 5 6 7 8
@@ -126,7 +128,7 @@ func (rf *Raft) RequestReplication(term int) {
 		var entries []Log
 
 		// we need to know the prevLogTerm, but the log entry of prefLogIndex may be already compacted in snapshot
-		if prevLogIndex <= rf.lastIncludedIndex {
+		if prevLogIndex < rf.lastIncludedIndex {
 			// actual index:            0 1 2
 			// log:         0 1 2 3 4 5 6 7 8
 			// snapshot:    |---------|
@@ -152,6 +154,8 @@ func (rf *Raft) RequestReplication(term int) {
 			reply := InstallSnapshotReply{}
 			go rf.SendInstallSnapshot(server, args, reply)
 			return
+		} else if prevLogIndex == rf.lastIncludedIndex {
+			prevLogTerm = rf.lastIncludeTerm
 		} else { // prevLogIndex > rf.lastIncludedIndex
 			// actual index:            0 1 2
 			// log:         0 1 2 3 4 5 6 7 8
@@ -251,11 +255,16 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		actualNextIndex := nextIndex - rf.lastIncludedIndex - 1
 		prevLogIndex := nextIndex - 1
 		actualIndex := prevLogIndex - rf.lastIncludedIndex - 1
-		prevLogTerm := rf.logs[actualIndex].Term
+		var prevLogTerm int
+		if actualIndex == -1 {
+			prevLogTerm = rf.lastIncludeTerm
+		} else {
+			prevLogTerm = rf.logs[actualIndex].Term
+		}
 		var entries []Log
 
 		// we need to know the prevLogTerm, but the log entry of prefLogIndex may be already compacted in snapshot
-		if prevLogIndex <= rf.lastIncludedIndex {
+		if prevLogIndex < rf.lastIncludedIndex {
 			// actual index:            0 1 2
 			// log:         0 1 2 3 4 5 6 7 8
 			// snapshot:    |---------|
@@ -281,6 +290,8 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 			reply := InstallSnapshotReply{}
 			go rf.SendInstallSnapshot(server, args, reply)
 			return
+		} else if prevLogIndex == rf.lastIncludedIndex {
+			prevLogTerm = rf.lastIncludeTerm
 		} else { // prevLogIndex > rf.lastIncludedIndex
 			// actual index:            0 1 2
 			// log:         0 1 2 3 4 5 6 7 8

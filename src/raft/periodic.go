@@ -27,9 +27,20 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 				// lastApplied:        |
 				// lastActualApplied = lastApplied (5) - lastIncludedIndex (2) - 1 = 2
 				lastActualApplied := rf.lastApplied - rf.lastIncludedIndex - 1
-				command := rf.logs[lastActualApplied].Command
+				// There must be that lastActualApplied < len(rf.logs), because that implies
+				// rf.lastApplied - rf.lastIncludedIndex (always >= -1) - 1 <= rf.lastApplied < len(rf.logs)
+
+				var applyMsg ApplyMsg
+				// if logs should be applied are in snapshot, we should apply our snapshot instead
+				if lastActualApplied < 0 {
+					applyMsg = ApplyMsg{false, nil, 0, true, rf.snapshot, rf.lastIncludeTerm, rf.lastIncludedIndex}
+					// update lastApplied to last included log entry in snapshot
+					rf.lastApplied = rf.lastIncludedIndex
+				} else {
+					command := rf.logs[lastActualApplied].Command
+					applyMsg = ApplyMsg{true, command, rf.lastApplied, false, nil, 0, 0}
+				}
 				rf.mu.Unlock()
-				applyMsg := ApplyMsg{true, command, rf.lastApplied, false, nil, 0, 0}
 				applyCh <- applyMsg
 			} else {
 				rf.mu.Unlock()

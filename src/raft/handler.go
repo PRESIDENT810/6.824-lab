@@ -117,6 +117,13 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	prevLogIndex := args.PrevLogIndex // use a local variable to store prevLogIndex for efficiency
 
+	// my snapshot includes all entries you send me, this packet may be outdated
+	if rf.lastIncludedIndex > len(args.Entries)+prevLogIndex {
+		reply.Term = rf.currentTerm
+		reply.Success = true
+		return
+	}
+
 	// Special treatment: I have an entry at prevLogIndex, but is in my snapshot
 	// INDEX:    0 1 2 3 4 5 6 7 8 9 	<=========================> 	INDEX:    0 1 2 3 4 5 6 7 8 9
 	// =============================									=============================
@@ -131,9 +138,9 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	// Snapshot: 1 1 1 2 2												Snapshot: 1 1 1 2 2
 	// The two cases above are equivalent, because what's in snapshot must be valid log entries
 	// prevLogIndex = 3, lastIncludedIndex = 4, trimFrom = 1 for args.Entries
-	if prevLogIndex <= rf.lastIncludedIndex {
+	if prevLogIndex < rf.lastIncludedIndex {
 		trimFrom := rf.lastIncludedIndex - prevLogIndex
-		args.PrevLogIndex = rf.lastIncludedIndex
+		prevLogIndex = rf.lastIncludedIndex
 		args.PrevLogTerm = args.Entries[trimFrom-1].Term
 		// INDEX:    0 1 2 3 4 5 6 7 8 9
 		// =============================
@@ -443,8 +450,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	rf.lastIncludedIndex = args.LastIncludedIndex
 	rf.lastIncludeTerm = args.LastIncludedTerm
 
-	rf.persist(rf.snapshot) // my logs are changed, so I need to save my states
+	// no need to increment my commit index, because new heartbeats will do
 
-	// TODO: do we need to update the commit index? Since figure 13 doesn't mention it, my guess is no
-	reply.Term = rf.currentTerm
+	rf.persist(rf.snapshot) // my logs are changed, so I need to save my states
 }
