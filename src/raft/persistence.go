@@ -19,6 +19,8 @@ type PersistentState struct {
 
 	LastIncludeTerm   int
 	LastIncludedIndex int
+
+	Snapshot []byte
 }
 
 //
@@ -31,7 +33,18 @@ func (rf *Raft) persist(snapshot []byte) {
 	encoder := labgob.NewEncoder(buffer)
 	logs := make([]Log, len(rf.logs))
 	copy(logs, rf.logs)
-	ps := PersistentState{rf.currentTerm, rf.voteFor, logs, rf.lastIncludeTerm, rf.lastIncludedIndex}
+	// Never use an empty snapshot to overwrite a valid snapshot
+	if snapshot == nil {
+		snapshot = rf.snapshot
+	}
+	ps := PersistentState{
+		rf.currentTerm,
+		rf.voteFor,
+		logs,
+		rf.lastIncludeTerm,
+		rf.lastIncludedIndex,
+		snapshot,
+	}
 	err := encoder.Encode(ps)
 	if err != nil {
 		log.Fatal("encode error:", err)
@@ -66,6 +79,8 @@ func (rf *Raft) readPersist(data []byte) {
 	// persistent state for snapshot
 	rf.lastIncludeTerm = ps.LastIncludeTerm
 	rf.lastIncludedIndex = ps.LastIncludedIndex
+
+	rf.snapshot = ps.Snapshot
 
 	// volatile state on all servers
 	rf.commitIndex = 0 // initialized to 0, increases monotonically

@@ -25,6 +25,11 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	// TODO: why Snapshot has an index less than lastIncludedIndex???
+	if index <= rf.lastIncludedIndex {
+		return
+	}
+
 	rf.snapshot = snapshot
 
 	// log         : 0 1 2 3 4 5 6 7 8

@@ -254,13 +254,7 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		nextIndex := rf.nextIndex[server]
 		actualNextIndex := nextIndex - rf.lastIncludedIndex - 1
 		prevLogIndex := nextIndex - 1
-		actualIndex := prevLogIndex - rf.lastIncludedIndex - 1
 		var prevLogTerm int
-		if actualIndex == -1 {
-			prevLogTerm = rf.lastIncludeTerm
-		} else {
-			prevLogTerm = rf.logs[actualIndex].Term
-		}
 		var entries []Log
 
 		// we need to know the prevLogTerm, but the log entry of prefLogIndex may be already compacted in snapshot
@@ -308,6 +302,11 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 			// and this case is already handled
 
 			actualIndex := prevLogIndex - rf.lastIncludedIndex - 1
+			if actualIndex == -1 {
+				prevLogTerm = rf.lastIncludeTerm
+			} else {
+				prevLogTerm = rf.logs[actualIndex].Term
+			}
 			prevLogTerm = rf.logs[actualIndex].Term // term of prevLogIndex entry
 			actualNextIndex = actualIndex + 1
 			nextIndex = actualIndex + rf.lastIncludedIndex + 1
@@ -356,8 +355,9 @@ func (rf *Raft) RunElection(term int) {
 	} else {
 		// actual index:              0 1
 		// log:         0 1 2 3 4 5 6 7 8
-		lastLogIndex = len(rf.logs) - 1          // index of my last log entry
-		lastLogTerm = rf.logs[lastLogIndex].Term // term of my last log entry
+		lastLogActualIndex := len(rf.logs) - 1 // index of my last log entry
+		lastLogIndex = lastLogActualIndex + rf.lastIncludedIndex + 1
+		lastLogTerm = rf.logs[lastLogActualIndex].Term // term of my last log entry
 	}
 
 	//rf.mu.Unlock()                            // unlock raft when RPC arguments are prepared
@@ -645,4 +645,21 @@ func (rf *Raft) SendInstallSnapshot(server int, args InstallSnapshotArgs, reply 
 		rf.ResetTimer()
 		return
 	}
+
+	// Since follower has already accepted my snapshot, he should increment his commitIndex to snapshot's lastIncludedIndex
+	// So I should update follower's nextIndex and matchIndex, too
+
+	// If other InstallSnapshot RPC has already incremented nextIndex and its lastIncludedIndex is lager than me,
+	// then my RPC must be delayed, so skip this
+	if rf.matchIndex[server] >= args.LastIncludedIndex {
+		return
+	}
+
+	// LastIncludedIndex must match
+	rf.matchIndex[server] = args.LastIncludedIndex
+	// So now we should sync logs after LastIncludedIndex
+	rf.nextIndex[server] = args.LastIncludedIndex + 1
+
+	// Snapshot has been synced, but we still need to sync entries after snapshot
+	//rf.SendHeartbeats(server)
 }

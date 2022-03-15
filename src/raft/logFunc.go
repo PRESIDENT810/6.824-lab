@@ -10,9 +10,9 @@ var logMutex sync.Mutex
 // whether show corresponding log
 const (
 	// TODO: for now we don't implement anything related to snapshot in logFunc, because it's too trouble some
-	debug       = false
+	debug       = true
 	showLog     = false
-	showLock    = false
+	showLock    = true
 	showPersist = false
 )
 

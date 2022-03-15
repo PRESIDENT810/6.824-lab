@@ -395,6 +395,12 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		// At this point, we are bound to use the given snapshot, so update last included index and term
 		rf.lastIncludedIndex = args.LastIncludedIndex
 		rf.lastIncludeTerm = args.LastIncludedTerm
+
+		// Increment commit index, then if applier sees the new commit index, it will increment apply index and apply snapshot
+		// All contents in snapshot can be regarded as commited, because anything in snapshot can't be wrong
+		rf.commitIndex = rf.lastIncludedIndex
+
+		rf.persist(rf.snapshot) // my logs are changed, so I need to save my states
 		return
 	}
 
@@ -424,6 +430,12 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		// At this point, we are bound to use the given snapshot, so update last included index and term
 		rf.lastIncludedIndex = args.LastIncludedIndex
 		rf.lastIncludeTerm = args.LastIncludedTerm
+
+		// Increment commit index, then if applier sees the new commit index, it will increment apply index and apply snapshot
+		// All contents in snapshot can be regarded as commited, because anything in snapshot can't be wrong
+		rf.commitIndex = rf.lastIncludedIndex
+
+		rf.persist(rf.snapshot) // my logs are changed, so I need to save my states
 		return
 	}
 
@@ -450,7 +462,9 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	rf.lastIncludedIndex = args.LastIncludedIndex
 	rf.lastIncludeTerm = args.LastIncludedTerm
 
-	// no need to increment my commit index, because new heartbeats will do
+	// Increment commit index, then if applier sees the new commit index, it will increment apply index and apply snapshot
+	// All contents in snapshot can be regarded as commited, because anything in snapshot can't be wrong
+	rf.commitIndex = rf.lastIncludedIndex
 
 	rf.persist(rf.snapshot) // my logs are changed, so I need to save my states
 }

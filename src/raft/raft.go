@@ -139,6 +139,8 @@ func (rf *Raft) GetState() (int, bool) {
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
+	//fmt.Printf("[server %d]: calling one with cmd %v\n", rf.me, command)
 	// log         : 0 1 2 3 4 5 6 7 8 9
 	// ActualIndex:              0 1 2 3
 	// entries:                  |---|
