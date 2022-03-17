@@ -45,6 +45,10 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 
 	// trim my log
 	rf.logs = rf.logs[actualIndex+1:]
+	// Use a new slice so the old array can be released
+	logCopy := make([]Log, len(rf.logs))
+	copy(logCopy, rf.logs)
+	rf.logs = logCopy
 
 	// persist
 	rf.persist(snapshot)
