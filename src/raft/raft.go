@@ -102,8 +102,10 @@ type Raft struct {
 	upVote           int
 	downVote         int
 
-	newestAppendEntriesRPCID []int64
-	newestRequestVoteRPCID   []int64
+	// for ignore outdated RPC response
+	newestAppendEntriesRPCID   []int64
+	newestRequestVoteRPCID     []int64
+	newestInstallSnapshotRPCID []int64
 }
 
 // GetState
@@ -223,21 +225,22 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.lastIncludedIndex = -1 // no snapshot at the beginning, so even the first log at index 0 isn't included
 	rf.lastIncludeTerm = -1
 
-	rf.snapshot = nil
+	rf.snapshot = make([]byte, 0)
 
 	// initialize extra attributes I added
 	rf.role = FOLLOWER // all servers should be followers when starting up
 	rf.ResetTimer()    // initialize the timer
-
-	go rf.ticker()            // set a timer to calculate elapsed time for election
-	go rf.SetApplier(applyCh) // set an applier to apply logs (send through applyCh)
-	go rf.MainRoutine()       // start raft instance's main routine
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
 	rf.newestAppendEntriesRPCID = make([]int64, len(peers))
 	rf.newestRequestVoteRPCID = make([]int64, len(peers))
+	rf.newestInstallSnapshotRPCID = make([]int64, len(peers))
+
+	go rf.ticker()            // set a timer to calculate elapsed time for election
+	go rf.SetApplier(applyCh) // set an applier to apply logs (send through applyCh)
+	go rf.MainRoutine()       // start raft instance's main routine
 
 	return rf
 }
