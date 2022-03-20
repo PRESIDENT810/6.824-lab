@@ -340,7 +340,6 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 			id,
 		}
 		reply = AppendEntriesReply{}
-		//time.Sleep(50 * time.Millisecond)
 		go rf.SendAppendEntries(server, args, reply) // resend AppendEntries RPC
 	}
 }
@@ -685,61 +684,11 @@ func (rf *Raft) SendInstallSnapshot(server int, args InstallSnapshotArgs, reply 
 		var prevLogTerm int
 		var entries []Log
 
-		// we need to know the prevLogTerm, but the log entry of prefLogIndex may be already compacted in snapshot
-		if prevLogIndex < rf.lastIncludedIndex {
-			// actual index:            0 1 2
-			// log:         0 1 2 3 4 5 6 7 8
-			// snapshot:    |---------|
-			// prevLogIndex:      |
-			// nextIndex:           |
-			// entries:             |-------|
-			// lastIncludedIndex = 5, prevLogTerm = 3, leader has already discarded the next log entry that it needs to send
-			// we don't know what's the term of prevLogIndex since it is in the snapshot, and we cannot send log of index 4, 5
-			// so we just install snapshot and return
-
-			// Note: if prevLogIndex == lastIncludedIndex, we still need to install snapshot
-			// this is because rf.logs might be empty, and the consequent handling will be troublesome
-			// thus we just install snapshot to make it easier
-
-			id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
-			rf.newestInstallSnapshotRPCID[server] = id
-			args := InstallSnapshotArgs{
-				term,
-				leaderId,
-				rf.lastIncludedIndex,
-				rf.lastIncludeTerm,
-				rf.snapshot,
-				id,
-			}
-			reply := InstallSnapshotReply{}
-			go rf.SendInstallSnapshot(server, args, reply)
-			return
-		} else if prevLogIndex == rf.lastIncludedIndex {
+		// these two must be equal, otherwise shit hits the fan
+		if prevLogIndex != rf.lastIncludedIndex {
+			panic("prevLogIndex != rf.lastIncludedIndex")
+		} else {
 			prevLogTerm = rf.lastIncludeTerm
-		} else { // prevLogIndex > rf.lastIncludedIndex
-			// actual index:            0 1 2
-			// log:         0 1 2 3 4 5 6 7 8
-			// snapshot:    |---------|
-			// prevLogIndex:            |
-			// nextIndex:                 |
-			// entries:                   |-|
-			// lastIncludedIndex = 5, prevLogTerm = 6, leader still has the next log entry that it needs to send
-			// the actual index of logs to send is 6-5 = 1
-
-			// Node: if prevLogIndex > rf.lastIncludedIndex, rf.logs will never be empty
-			// because prefLogIndex < len(rf.logs) (before compaction) = lastIncludedIndex+len(rf.logs)+1 (after compaction)
-			// if rf.logs is empty, len(rf.logs) == 0, prefLogIndex < lastIncludedIndex+1, prefLogIndex <= lastIncludedIndex
-			// and this case is already handled
-
-			actualIndex := prevLogIndex - rf.lastIncludedIndex - 1
-			if actualIndex == -1 {
-				prevLogTerm = rf.lastIncludeTerm
-			} else {
-				prevLogTerm = rf.logs[actualIndex].Term
-			}
-			prevLogTerm = rf.logs[actualIndex].Term // term of prevLogIndex entry
-			actualNextIndex = actualIndex + 1
-			nextIndex = actualIndex + rf.lastIncludedIndex + 1
 		}
 
 		entries = rf.logs[actualNextIndex:] // send the log entry with nextIndex, since follower doesn't match, nextIndex won't exceed len(rf.log)
@@ -758,7 +707,6 @@ func (rf *Raft) SendInstallSnapshot(server int, args InstallSnapshotArgs, reply 
 			id,
 		}
 		reply := AppendEntriesReply{}
-		//time.Sleep(50 * time.Millisecond)
 		go rf.SendAppendEntries(server, args, reply) // resend AppendEntries RPC
 	}
 }
