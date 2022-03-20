@@ -660,12 +660,20 @@ func (rf *Raft) SendInstallSnapshot(server int, args InstallSnapshotArgs, reply 
 		return
 	}
 
+	if args.LastIncludedIndex != rf.lastIncludedIndex {
+		return
+	}
+
 	// Since follower has already accepted my snapshot, he should increment his commitIndex to snapshot's lastIncludedIndex
 	// So I should update follower's nextIndex and matchIndex, too
 
 	// If other InstallSnapshot RPC has already incremented nextIndex and its lastIncludedIndex is lager than me,
 	// then my RPC must be delayed, so skip this
 	if rf.matchIndex[server] >= args.LastIncludedIndex {
+		return
+	}
+
+	if rf.nextIndex[server] >= args.LastIncludedIndex+1 {
 		return
 	}
 
