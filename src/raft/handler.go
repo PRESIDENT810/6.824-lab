@@ -92,6 +92,16 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	rf.LogAppendEntriesIn(*args, *reply)
+	defer rf.LogAppendEntriesOut(rf.me, *args, *reply)
+
+	// TODO: I think problem is how we deal with index changed by snapshot
+	// Observation:
+	// 1. Even if I let SendSnapshot just return, TestSnapshotBasic2D works fine
+	// 2. RPC counts of TestSnapshotBasic2D are too many
+	// 3. If, when the server comes back up, it reads the updated snapshot, but the outdated log,
+	// it may end up applying some log entries that are already contained within the snapshot (see student guide)
+
 	rf.persist(nil)
 
 	if args.Term < rf.currentTerm { // my term is newer
@@ -262,6 +272,9 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	rf.LogRequestVoteIn(rf.me, *args, *reply)
+	defer rf.LogRequestVoteOut(rf.me, *args, *reply)
+
 	rf.persist(nil)
 
 	upToDate := true // is your log more up-to-date?
@@ -339,6 +352,9 @@ func (rf *Raft) findFirstIndex(term int) int {
 func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapshotReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
+	rf.LogInstallSnapshotIn(rf.me, *args, *reply)
+	defer rf.LogInstallSnapshotOut(rf.me, *args, *reply)
 
 	rf.persist(nil)
 

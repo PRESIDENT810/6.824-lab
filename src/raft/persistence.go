@@ -70,6 +70,9 @@ func (rf *Raft) readPersist(data []byte) {
 	}
 
 	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	rf.LogReadPersist(ps)
 
 	// persistent state on all servers
 	rf.currentTerm = ps.CurrentTerm
@@ -92,5 +95,4 @@ func (rf *Raft) readPersist(data []byte) {
 		rf.nextIndex[idx] = 1 // log starts with 1, so the nextIndex should be 1 (every raft peer has the same log[0]!)
 	}
 	rf.matchIndex = make([]int, len(rf.peers)) // don't need to initialize now since I'm not a leader on first boot
-	rf.mu.Unlock()
 }
