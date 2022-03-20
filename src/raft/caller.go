@@ -216,6 +216,9 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
+	rf.LogSendAppendEntriesIn(server, args, reply)
+	defer rf.LogSendAppendEntriesOut(server, args, reply)
+
 	if rf.newestAppendEntriesRPCID[server] > args.RPCID {
 		return
 	}
@@ -408,6 +411,9 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 
 	rf.mu.Lock()         // add mutex lock before you access attributes of raft instance
 	defer rf.mu.Unlock() // release mutex lock when the function quits
+
+	rf.LogSendRequestVoteIn(server, args, reply)
+	defer rf.LogSendRequestVoteOut(server, args, reply)
 
 	if rf.newestRequestVoteRPCID[server] > args.RPCID {
 		return
@@ -632,6 +638,9 @@ func (rf *Raft) SendInstallSnapshot(server int, args InstallSnapshotArgs, reply 
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
+	rf.LogSendInstallSnapshotIn(server, args, reply)
+	defer rf.LogSendInstallSnapshotOut(server, args, reply)
 
 	if args.Term != rf.currentTerm || rf.role != LEADER { // a long winding path of blood, sweat, tears and despair
 		return
