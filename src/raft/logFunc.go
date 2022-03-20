@@ -2,133 +2,348 @@ package raft
 
 import (
 	"fmt"
+	"log"
+	"reflect"
 	"sync"
 )
 
-var logMutex sync.Mutex
+var LogMutex sync.Mutex
 
-// whether show corresponding log
-const (
-	// TODO: for now we don't implement anything related to snapshot in logFunc, because it's too trouble some
-	debug       = true
-	showLog     = false
-	showLock    = true
-	showPersist = false
-)
+type LogConfig struct {
+	EnablePrintf bool
+	// Log config for callers
+	EnableLogSendAppendEntries   bool
+	EnableLogSendRequestVote     bool
+	EnableLogSendInstallSnapshot bool
+	// Log config for handlers
+	EnableLogAppendEntries   bool
+	EnableLogRequestVote     bool
+	EnableLogInstallSnapshot bool
+	// Log config for persistence
+	EnableLogPersist bool
+	// Log config for snapshot
+	EnableLogSnapshot bool
+	// Log config for periodic
+	EnableLogPeriodic bool
+}
 
-// Printf
-//
-// wrapper of fmt.Printf, if showLog is false, then don't print log about states
+var logConfig = LogConfig{
+	false,
+	false,
+	false,
+	false,
+	false,
+	false,
+	false,
+	false,
+	false,
+	false,
+}
+
 func Printf(format string, a ...interface{}) {
-	if showLog {
+	if logConfig.EnablePrintf {
 		fmt.Printf(format, a...)
 	}
 }
 
-// PrintLock
-//
-// wrapper of fmt.Printf, if showLock is false, then don't print log about locks
-func PrintLock(format string, a ...interface{}) {
-	if showLock {
-		fmt.Printf(format, a...)
+func LogStruct(args interface{}) {
+	t := reflect.TypeOf(args)
+	name := t.Name()
+	n := t.NumField()
+	v := reflect.ValueOf(args)
+	fmt.Printf("------------------------%v------------------------\n", name)
+	for i := 0; i < n; i++ {
+		fieldName := t.Field(i).Name
+		fieldValue := v.FieldByName(fieldName)
+		fmt.Printf("%v=%v\n", fieldName, fieldValue)
+	}
+	fmt.Println("")
+}
+
+func LogRaft(rf *Raft) {
+	fmt.Printf("------------------------Raft status------------------------\n")
+	fmt.Printf("currentTerm=%d\n", rf.currentTerm)
+	fmt.Printf("voteFor=%d\n", rf.voteFor)
+	fmt.Printf("logs=%v\n", rf.logs)
+	fmt.Printf("commitIndex=%d\n", rf.commitIndex)
+	fmt.Printf("lastApplied=%d\n", rf.lastApplied)
+	if rf.role == LEADER {
+		fmt.Printf("nextIndex=%d\n", rf.nextIndex)
+		fmt.Printf("matchIndex=%d\n", rf.matchIndex)
+	}
+	fmt.Printf("lastIncludedTerm=%d\n", rf.lastIncludeTerm)
+	fmt.Printf("lastIncludedIndex=%d\n", rf.lastIncludedIndex)
+	var role string
+	if rf.role == LEADER {
+		role = "LEADER"
+	} else if rf.role == CANDIDATE {
+		role = "CANDIDATE"
+	} else {
+		role = "FOLLOWER"
+	}
+	fmt.Printf("role=%v\n", role)
+}
+
+// Log utility functions for callers
+
+func (rf *Raft) LogSendAppendEntriesIn(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
+	if logConfig.EnableLogSendAppendEntries {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] enters SendAppendEntries with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
+		LogStruct(args)
+		LogRaft(rf)
 	}
 }
 
-// PrintPersist
-//
-// wrapper of fmt.Printf, if showPersist is false, then don't print log about persister
-func PrintPersist(format string, a ...interface{}) {
-	if showPersist {
-		fmt.Printf(format, a...)
+func (rf *Raft) LogSendAppendEntriesOut(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
+	if logConfig.EnableLogSendAppendEntries {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] exits SendAppendEntries with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
+		LogStruct(reply)
+		LogRaft(rf)
 	}
 }
 
-// LogServerStates
-//
-// log server info
-//
-func (rf *Raft) LogServerStates() {
-	Printf("=======================================================================================================\n")
-	Printf("[server%d] reports\nCurrentTerm: %d, voteFor: %d, commitIndex: %d, lastApplied: %d, role: %d, electionExpired: %t\n",
-		rf.me, rf.currentTerm, rf.voteFor, rf.commitIndex, rf.lastApplied, rf.role, rf.electionExpired)
-	Printf("My log entries are: %v\n", rf.logs)
-	Printf("Volatile state on leaders:\n")
-	Printf("nextIndex: ")
-	for _, i := range rf.nextIndex {
-		Printf("%d ", i)
+func (rf *Raft) LogSendRequestVoteIn(server int, args RequestVoteArgs, reply RequestVoteReply) {
+	if logConfig.EnableLogSendRequestVote {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] enters SendRequestVote with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
+		LogStruct(args)
+		LogRaft(rf)
 	}
-	Printf("\nmatchIndex: ")
-	for _, i := range rf.matchIndex {
-		Printf("%d ", i)
+}
+
+func (rf *Raft) LogSendRequestVoteOut(server int, args RequestVoteArgs, reply RequestVoteReply) {
+	if logConfig.EnableLogSendRequestVote {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] exits SendRequestVote with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
+		LogStruct(reply)
+		LogRaft(rf)
 	}
-	Printf("\n")
-	Printf("=======================================================================================================\n\n")
 }
 
-// LogAppendEntriesReceive
-//
-// log AppendEntries RPC info on receiver side
-//
-func (rf *Raft) LogAppendEntriesReceive(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	logMutex.Lock()
-	defer logMutex.Unlock()
-	Printf("[server%d] receives [AppendEntries RPC %d]\nArguments:\nterm: %d, leaderId: %d, prevLogIndex: %d, prevLogTerm: %d, entry: %v, leaderCommit: %d\n\n\n",
-		rf.me, args.RPCID, args.Term, args.LeaderId, args.PrevLogIndex, args.PrevLogTerm, args.Entries, args.LeaderCommit)
-	rf.LogServerStates()
+func (rf *Raft) LogSendInstallSnapshotIn(server int, args InstallSnapshotArgs, reply InstallSnapshotReply) {
+	if logConfig.EnableLogSendInstallSnapshot {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] enters SendInstallSnapshot with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
+		LogStruct(args)
+		LogRaft(rf)
+	}
 }
 
-// LogRequestVoteReceive
-//
-// log RequestVote RPC info on sender side
-//
-func (rf *Raft) LogRequestVoteReceive(args *RequestVoteArgs, reply *RequestVoteReply) {
-	logMutex.Lock()
-	defer logMutex.Unlock()
-	Printf("[server%d] receives [RequestVote RPC %d]\nArguments:\nterm: %d, candidateId: %d, lastLogIndex: %d, lastLogTerm: %d\n\n\n",
-		rf.me, args.RPCID, args.Term, args.CandidateId, args.LastLogIndex, args.LastLogTerm)
-	rf.LogServerStates()
+func (rf *Raft) LogSendInstallSnapshotOut(server int, args InstallSnapshotArgs, reply InstallSnapshotReply) {
+	if logConfig.EnableLogSendInstallSnapshot {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] exits SendInstallSnapshot with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
+		LogStruct(reply)
+		LogRaft(rf)
+	}
 }
 
-// LogAppendEntriesSend
-//
-// log AppendEntries RPC info on sender side
-//
-func (rf *Raft) LogAppendEntriesSend(sender, receiver int, args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	logMutex.Lock()
-	defer logMutex.Unlock()
-	Printf("[server%d] sends [AppendEntries RPC %d] to [server%d]\nArguments:\nterm: %d, leaderId: %d, prevLogIndex: %d, prevLogTerm: %d, entry: %v, leaderCommit: %d\nReply:\nterm: %d, success: %t, conflictTerm: %d, ConflictIndex: %d\n\n\n",
-		sender, args.RPCID, receiver, args.Term, args.LeaderId, args.PrevLogIndex, args.PrevLogTerm, args.Entries, args.LeaderCommit, reply.Term, reply.Success, reply.ConflictTerm, reply.ConflictIndex)
-	rf.LogServerStates()
+// Log utility functions for handlers
+
+func (rf *Raft) LogAppendEntriesIn(args AppendEntriesArgs, reply AppendEntriesReply) {
+	if logConfig.EnableLogAppendEntries {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] -> {Server %d} enters AppendEntries with [RPCID %d]\n", args.LeaderId, rf.me, args.RPCID)
+		LogStruct(args)
+		LogRaft(rf)
+	}
 }
 
-// LogRequestVoteSend
-//
-// log RequestVote RPC info on sender side
-//
-func (rf *Raft) LogRequestVoteSend(sender, receiver int, args *RequestVoteArgs, reply *RequestVoteReply) {
-	logMutex.Lock()
-	defer logMutex.Unlock()
-	Printf("[server%d] sends [RequestVote RPC %d] to [server%d]\nArguments:\nterm: %d, candidateId: %d, lastLogIndex: %d, lastLogTerm: %d\nReply:\nterm: %d, voteGranted: %t\n\n\n",
-		sender, args.RPCID, receiver, args.Term, args.CandidateId, args.LastLogIndex, args.LastLogTerm, reply.Term, reply.VoteGranted)
-	rf.LogServerStates()
+func (rf *Raft) LogAppendEntriesOut(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
+	if logConfig.EnableLogAppendEntries {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] -> {Server %d} exits AppendEntries with [RPCID %d]\n", args.LeaderId, rf.me, args.RPCID)
+		LogStruct(reply)
+		LogRaft(rf)
+	}
 }
 
-// LogReadPersistState
-//
-// log ReadPersist
-//
-func (rf *Raft) LogReadPersistState(ps *PersistentState) {
-	logMutex.Lock()
-	defer logMutex.Unlock()
-	PrintPersist("[server%d] calls ReadPersist from persister\ncurrentTerm: %d, voteFor: %d, logs: %v\n\n\n", rf.me, ps.CurrentTerm, ps.VoteFor, ps.Logs)
+func (rf *Raft) LogRequestVoteIn(server int, args RequestVoteArgs, reply RequestVoteReply) {
+	if logConfig.EnableLogRequestVote {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] -> {Server %d} enters RequestVote with [RPCID %d]\n", args.CandidateId, rf.me, args.RPCID)
+		LogStruct(args)
+		LogRaft(rf)
+	}
 }
 
-// LogPersistState
-//
-// log Persist
-//
-func (rf *Raft) LogPersistState(ps *PersistentState) {
-	logMutex.Lock()
-	defer logMutex.Unlock()
-	PrintPersist("[server%d] calls Persist to persister\ncurrentTerm: %d, voteFor: %d, logs: %v\n\n\n", rf.me, ps.CurrentTerm, ps.VoteFor, ps.Logs)
+func (rf *Raft) LogRequestVoteOut(server int, args RequestVoteArgs, reply RequestVoteReply) {
+	if logConfig.EnableLogRequestVote {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] -> {Server %d} exits RequestVote with [RPCID %d]\n", args.CandidateId, rf.me, args.RPCID)
+		LogStruct(reply)
+		LogRaft(rf)
+	}
+}
+
+func (rf *Raft) LogInstallSnapshotIn(server int, args InstallSnapshotArgs, reply InstallSnapshotReply) {
+	if logConfig.EnableLogInstallSnapshot {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] enters InstallSnapshot with [RPCID %d]\n", server, args.RPCID)
+		LogStruct(args)
+		LogRaft(rf)
+	}
+}
+
+func (rf *Raft) LogInstallSnapshotOut(server int, args InstallSnapshotArgs, reply InstallSnapshotReply) {
+	if logConfig.EnableLogInstallSnapshot {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] exits InstallSnapshot with [RPCID %d]\n", server, args.RPCID)
+		LogStruct(reply)
+		LogRaft(rf)
+	}
+}
+
+// Log utility functions for persistence
+
+func (rf *Raft) LogPersist(ps PersistentState) {
+	if logConfig.EnableLogPersist {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] persists state\n", rf.me)
+		LogStruct(ps)
+		LogRaft(rf)
+	}
+}
+
+func (rf *Raft) LogReadPersist(ps PersistentState) {
+	if logConfig.EnableLogPersist {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] reads persisted state\n", rf.me)
+		LogStruct(ps)
+		LogRaft(rf)
+	}
+}
+
+// Log utility functions for snapshot
+
+func (rf *Raft) LogSnapshotIn(index int) {
+	if logConfig.EnableLogSnapshot {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] enters Snapshot with index=%d\n", rf.me, index)
+		LogRaft(rf)
+	}
+}
+
+func (rf *Raft) LogSnapshotOut(index int) {
+	if logConfig.EnableLogSnapshot {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] exits Snapshot with index=%d\n", rf.me, index)
+		LogRaft(rf)
+	}
+}
+
+// Log utlity functions for periodic
+
+func (rf *Raft) LogSetCommitterIn() {
+	if logConfig.EnableLogPeriodic {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		LogRaft(rf)
+	}
+}
+
+func (rf *Raft) LogSetCommitterOut() {
+	if logConfig.EnableLogPeriodic {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		LogRaft(rf)
+	}
+}
+
+func (rf *Raft) LogSetApplierIn() {
+	if logConfig.EnableLogPeriodic {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		LogRaft(rf)
+	}
+}
+
+func (rf *Raft) LogSetApplierOut() {
+	if logConfig.EnableLogPeriodic {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		LogRaft(rf)
+	}
 }
