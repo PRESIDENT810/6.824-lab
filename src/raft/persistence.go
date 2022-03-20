@@ -33,10 +33,6 @@ func (rf *Raft) persist(snapshot []byte) {
 	encoder := labgob.NewEncoder(buffer)
 	logs := make([]Log, len(rf.logs))
 	copy(logs, rf.logs)
-	// Never use an empty snapshot to overwrite a valid snapshot
-	if snapshot == nil {
-		snapshot = rf.snapshot
-	}
 	ps := PersistentState{
 		rf.currentTerm,
 		rf.voteFor,
@@ -50,7 +46,13 @@ func (rf *Raft) persist(snapshot []byte) {
 		log.Fatal("encode error:", err)
 	}
 	data := buffer.Bytes()
-	rf.persister.SaveStateAndSnapshot(data, snapshot)
+	rf.LogPersist(ps)
+	// Never use an empty snapshot to overwrite a valid snapshot
+	if snapshot == nil {
+		rf.persister.SaveRaftState(data)
+	} else {
+		rf.persister.SaveStateAndSnapshot(data, snapshot)
+	}
 }
 
 //
@@ -86,8 +88,13 @@ func (rf *Raft) readPersist(data []byte) {
 	rf.snapshot = ps.Snapshot
 
 	// volatile state on all servers
-	rf.commitIndex = 0 // initialized to 0, increases monotonically
-	rf.lastApplied = 0 // initialized to 0, increases monotonically
+	if rf.lastIncludedIndex == -1 {
+		rf.commitIndex = 0 // initialized to 0, increases monotonically
+		rf.lastApplied = 0 // initialized to 0, increases monotonically
+	} else {
+		rf.commitIndex = rf.lastIncludedIndex // any log in snapshot should be committed and applied
+		rf.lastApplied = rf.lastIncludedIndex // any log in snapshot should be committed and applied
+	}
 
 	// volatile state on leaders (must be reinitialized after election)
 	rf.nextIndex = make([]int, len(rf.peers)) // don't need to initialize now since I'm not a leader on first boot
