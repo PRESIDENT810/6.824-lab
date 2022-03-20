@@ -470,6 +470,10 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	// There is an existing log entry with same index as snapshot's last included entry, and its index is actualLastIncludedIndex,
 	// actualLastIncludedIndex = 7-2-1 = 4
 	rf.logs = rf.logs[actualLastIncludedIndex+1:]
+	// Use a new slice so the old array can be released
+	logCopy := make([]Log, len(rf.logs))
+	copy(logCopy, rf.logs)
+	rf.logs = logCopy
 
 	// If my snapshot is shorter than this one, then use this one because it includes more log entries
 	// save the snapshot, discard any existing snapshot with a smaller index
