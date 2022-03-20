@@ -238,12 +238,8 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 	}
 
 	if reply.Success { // this follower's log now is matched to mine, so update the nextIndex and matchIndex
-		if rf.matchIndex[server] < args.PrevLogIndex+len(args.Entries) {
-			rf.matchIndex[server] = args.PrevLogIndex + len(args.Entries) // prevLog matches, and since success, entries just append also matches
-			rf.nextIndex[server] = rf.matchIndex[server] + 1              // increment nextIndex by the number of entries just append
-		} else {
-			return // someone else incremented matchIndex, so he should take care of the following synchronization
-		}
+		rf.matchIndex[server] = args.PrevLogIndex + len(args.Entries) // prevLog matches, and since success, entries just append also matches
+		rf.nextIndex[server] = rf.matchIndex[server] + 1              // increment nextIndex by the number of entries just append
 	} else { // this follower didn't catch up with my logs
 		if rf.nextIndex[server]-1 == args.PrevLogIndex { // no one else has decremented nextIndex
 			rf.nextIndex[server] = rf.findNextIndex(&args, &reply, server) // findNextIndex returns the entry where our logs might match, and nextIndex should be its next entry

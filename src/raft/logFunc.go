@@ -3,6 +3,7 @@ package raft
 import (
 	"fmt"
 	"log"
+	"os"
 	"reflect"
 	"sync"
 )
@@ -28,16 +29,35 @@ type LogConfig struct {
 }
 
 var logConfig = LogConfig{
+	true,
+	true,
 	false,
+	true,
+	true,
 	false,
+	true,
 	false,
+	true,
 	false,
-	false,
-	false,
-	false,
-	false,
-	false,
-	false,
+}
+
+func init() {
+	DEBUG := os.Getenv("DEBUG")
+	if DEBUG != "ON" {
+		logConfig = LogConfig{
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+			false,
+		}
+
+	}
 }
 
 func Printf(format string, a ...interface{}) {
@@ -61,7 +81,7 @@ func LogStruct(args interface{}) {
 }
 
 func LogRaft(rf *Raft) {
-	fmt.Printf("------------------------Raft status------------------------\n")
+	fmt.Printf("------------------------[Raft %d] status------------------------\n", rf.me)
 	fmt.Printf("currentTerm=%d\n", rf.currentTerm)
 	fmt.Printf("voteFor=%d\n", rf.voteFor)
 	fmt.Printf("logs=%v\n", rf.logs)
@@ -95,6 +115,7 @@ func (rf *Raft) LogSendAppendEntriesIn(server int, args AppendEntriesArgs, reply
 		defer log.Println("====================================================================")
 		log.Printf("[Server %d] enters SendAppendEntries with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
 		LogStruct(args)
+		LogStruct(reply)
 		LogRaft(rf)
 	}
 }
@@ -107,7 +128,6 @@ func (rf *Raft) LogSendAppendEntriesOut(server int, args AppendEntriesArgs, repl
 		log.Println("====================================================================")
 		defer log.Println("====================================================================")
 		log.Printf("[Server %d] exits SendAppendEntries with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
-		LogStruct(reply)
 		LogRaft(rf)
 	}
 }
@@ -121,6 +141,7 @@ func (rf *Raft) LogSendRequestVoteIn(server int, args RequestVoteArgs, reply Req
 		defer log.Println("====================================================================")
 		log.Printf("[Server %d] enters SendRequestVote with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
 		LogStruct(args)
+		LogStruct(reply)
 		LogRaft(rf)
 	}
 }
@@ -135,7 +156,6 @@ func (rf *Raft) LogSendRequestVoteOut(server int, args RequestVoteArgs, reply Re
 		log.Println("====================================================================")
 		defer log.Println("====================================================================")
 		log.Printf("[Server %d] exits SendRequestVote with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
-		LogStruct(reply)
 		LogRaft(rf)
 	}
 }
@@ -149,6 +169,7 @@ func (rf *Raft) LogSendInstallSnapshotIn(server int, args InstallSnapshotArgs, r
 		defer log.Println("====================================================================")
 		log.Printf("[Server %d] enters SendInstallSnapshot with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
 		LogStruct(args)
+		LogStruct(reply)
 		LogRaft(rf)
 	}
 }
@@ -161,7 +182,6 @@ func (rf *Raft) LogSendInstallSnapshotOut(server int, args InstallSnapshotArgs, 
 		log.Println("====================================================================")
 		defer log.Println("====================================================================")
 		log.Printf("[Server %d] exits SendInstallSnapshot with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
-		LogStruct(reply)
 		LogRaft(rf)
 	}
 }
@@ -189,7 +209,7 @@ func (rf *Raft) LogAppendEntriesOut(server int, args AppendEntriesArgs, reply Ap
 		log.Println("====================================================================")
 		defer log.Println("====================================================================")
 		log.Printf("[Server %d] -> {Server %d} exits AppendEntries with [RPCID %d]\n", args.LeaderId, rf.me, args.RPCID)
-		LogStruct(reply)
+		//LogStruct(reply)
 		LogRaft(rf)
 	}
 }
@@ -217,7 +237,7 @@ func (rf *Raft) LogRequestVoteOut(server int, args RequestVoteArgs, reply Reques
 		log.Println("====================================================================")
 		defer log.Println("====================================================================")
 		log.Printf("[Server %d] -> {Server %d} exits RequestVote with [RPCID %d]\n", args.CandidateId, rf.me, args.RPCID)
-		LogStruct(reply)
+		//LogStruct(reply)
 		LogRaft(rf)
 	}
 }
@@ -243,7 +263,7 @@ func (rf *Raft) LogInstallSnapshotOut(server int, args InstallSnapshotArgs, repl
 		log.Println("====================================================================")
 		defer log.Println("====================================================================")
 		log.Printf("[Server %d] exits InstallSnapshot with [RPCID %d]\n", server, args.RPCID)
-		LogStruct(reply)
+		//LogStruct(reply)
 		LogRaft(rf)
 	}
 }
