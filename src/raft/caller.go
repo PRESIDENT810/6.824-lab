@@ -16,8 +16,8 @@ var serialNumber int64 = 0
 //
 func (rf *Raft) SendHeartbeats(term int) {
 
-	//rf.mu.Lock()
-	//defer rf.mu.Unlock()
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
 	if term != rf.currentTerm { // in case currentTerm is changed by other goroutines before sending RPC
 		return
@@ -233,7 +233,7 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		rf.voteFor = -1             // reset voteFor
 		rf.role = FOLLOWER          // convert to follower
 		rf.persist(nil)             // currentTerm and voteFor are changed, so I need to save my states
-		rf.ResetTimer()
+		rf.resetElectionTimer()
 		return
 	}
 
@@ -349,8 +349,8 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 func (rf *Raft) RunElection(term int) {
 
 	//rf.mu.Lock()                              // lock raft instance to prepare the RPC arguments
-	rf.ResetTimer()      // reset the election timer because when starting an election
-	candidateId := rf.me // candidate id, which is me!
+	rf.resetElectionTimer() // reset the election timer because when starting an election
+	candidateId := rf.me    // candidate id, which is me!
 
 	var lastLogIndex, lastLogTerm int
 	if len(rf.logs) == 0 {
@@ -435,7 +435,7 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 		rf.voteFor = -1             // reset my voteFor
 		rf.role = FOLLOWER          // convert to follower
 		rf.persist(nil)             // currentTerm and voteFor are changed, so I need to save my states
-		rf.ResetTimer()
+		rf.resetElectionTimer()
 		return
 	}
 
@@ -449,8 +449,10 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 					rf.nextIndex[idx] = args.LastLogIndex + 1 // initialize nextIndex to leader last log index+1
 					rf.matchIndex[idx] = 0                    // initialize matchIndex to 0
 				}
-				go rf.SetCommitter() // set a committer to periodically check if the commitIndex can be incremented
-				//rf.SendHeartbeats(rf.currentTerm) // upon election, send initial heartbeat to each server
+				go rf.SetCommitter()                 // set a committer to periodically check if the commitIndex can be incremented
+				go rf.heartbeatTicker()              // set a ticker as leader for periodically sending heartbeat
+				go rf.SendHeartbeats(rf.currentTerm) // upon election, send initial heartbeat to each server
+				rf.resetHeartbeatTimer()
 			}
 		} else { // this server agree to vote for me
 			rf.downVote++
@@ -650,7 +652,7 @@ func (rf *Raft) SendInstallSnapshot(server int, args InstallSnapshotArgs, reply 
 		rf.voteFor = -1             // reset voteFor
 		rf.role = FOLLOWER          // convert to follower
 		rf.persist(nil)             // currentTerm and voteFor are changed, so I need to save my states
-		rf.ResetTimer()
+		rf.resetElectionTimer()
 		return
 	}
 

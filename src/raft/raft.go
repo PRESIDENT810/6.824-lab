@@ -102,6 +102,9 @@ type Raft struct {
 	upVote           int
 	downVote         int
 
+	heartbeatLastTime time.Time
+	heartbeatExpired  bool
+
 	// for ignore outdated RPC response
 	newestAppendEntriesRPCID   []int64
 	newestRequestVoteRPCID     []int64
@@ -158,6 +161,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		rf.logs = append(rf.logs, Log{rf.currentTerm, command}) // log to replicate to the cluster
 		rf.persist(nil)                                         // logs are changed, so I need to save my states
 		go rf.RequestReplication(rf.currentTerm)
+		rf.resetHeartbeatTimer()
 	}
 
 	return index, term, isLeader
@@ -228,8 +232,8 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.snapshot = make([]byte, 0)
 
 	// initialize extra attributes I added
-	rf.role = FOLLOWER // all servers should be followers when starting up
-	rf.ResetTimer()    // initialize the timer
+	rf.role = FOLLOWER      // all servers should be followers when starting up
+	rf.resetElectionTimer() // initialize the timer
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
@@ -238,7 +242,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.newestRequestVoteRPCID = make([]int64, len(peers))
 	rf.newestInstallSnapshotRPCID = make([]int64, len(peers))
 
-	go rf.ticker()            // set a timer to calculate elapsed time for election
+	go rf.electionTicker()    // set a timer to calculate elapsed time for election
 	go rf.SetApplier(applyCh) // set an applier to apply logs (send through applyCh)
 	go rf.MainRoutine()       // start raft instance's main routine
 
@@ -261,14 +265,17 @@ func (rf *Raft) MainRoutine() {
 		rf.mu.Lock()
 		switch rf.role {
 		case LEADER: // if you are a leader, then you should send heartbeats
-			rf.SendHeartbeats(rf.currentTerm)
+			if rf.heartbeatExpired {
+				go rf.SendHeartbeats(rf.currentTerm)
+				rf.resetHeartbeatTimer()
+			}
 			rf.mu.Unlock()
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(20 * time.Millisecond)
 		case CANDIDATE: // if you are a candidate, you should start a election
 			if rf.electionExpired {
 				rf.currentTerm++   // increment my current term
 				rf.voteFor = rf.me // vote for myself
-				rf.ResetTimer()
+				rf.resetElectionTimer()
 				rf.RunElection(rf.currentTerm) // if electionExpired is false, it means you elect too fast, wait for the timeout
 				rf.persist(nil)                // currentTerm and voteFor are changed, so I need to save my states
 			}

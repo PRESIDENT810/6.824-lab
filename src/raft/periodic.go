@@ -116,7 +116,7 @@ func (rf *Raft) SetCommitter() {
 // heartsbeats recently.
 
 //
-func (rf *Raft) ticker() {
+func (rf *Raft) electionTicker() {
 	rand.Seed(int64(rf.me) * time.Now().Unix()) // set a random number seed to ensure it generates different random number
 	timeout := rand.Intn(300) + 300             // generate a random timeout threshold between 150 to 300ms
 	for rf.killed() == false {                  // if the raft instance is killed, it means this test is finished and we should quit
@@ -140,13 +140,50 @@ func (rf *Raft) ticker() {
 	}
 }
 
-// ResetTimer
 //
-// reset timer
+// the timer to calculate time passed since last heartbeat / replication
+// if the time is more than 200ms
+// then there is a timeout, and the raft instance should set shouldHeartbeat to ture
+// to notify itself it should send a new round of heartbeat
+
+// The ticker go routine starts a new election if this peer hasn't received
+// heartsbeats recently.
+
 //
-func (rf *Raft) ResetTimer() {
+func (rf *Raft) heartbeatTicker() {
+	timeout := 200             // generate a random timeout threshold between 150 to 300ms
+	for rf.killed() == false { // if the raft instance is killed, it means this test is finished and we should quit
+		time.Sleep(20 * time.Millisecond) // sleep a while to save some CPU time
+		rf.mu.Lock()
+		if rf.role != LEADER {
+			rf.mu.Unlock()
+			return
+		}
+		heartbeatCurrentTime := time.Now()
+		if heartbeatCurrentTime.Sub(rf.heartbeatLastTime).Milliseconds() > int64(timeout) {
+			rf.heartbeatExpired = true        // election time expired! you should run a new election now
+			rf.heartbeatLastTime = time.Now() // reset the timer
+		}
+		rf.mu.Unlock()
+	}
+}
+
+// resetElectionTimer
+//
+// reset election timer
+//
+func (rf *Raft) resetElectionTimer() {
 	rf.electionExpired = false
 	rf.electionLastTime = time.Now()
+}
+
+// resetHeartbeatTimer
+//
+// reset heartbeat timer
+//
+func (rf *Raft) resetHeartbeatTimer() {
+	rf.heartbeatExpired = false
+	rf.heartbeatLastTime = time.Now()
 }
 
 //
