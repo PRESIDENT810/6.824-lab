@@ -449,8 +449,8 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 					rf.nextIndex[idx] = args.LastLogIndex + 1 // initialize nextIndex to leader last log index+1
 					rf.matchIndex[idx] = 0                    // initialize matchIndex to 0
 				}
-				go rf.SetCommitter()              // set a committer to periodically check if the commitIndex can be incremented
-				rf.SendHeartbeats(rf.currentTerm) // upon election, send initial heartbeat to each server
+				go rf.SetCommitter() // set a committer to periodically check if the commitIndex can be incremented
+				//rf.SendHeartbeats(rf.currentTerm) // upon election, send initial heartbeat to each server
 			}
 		} else { // this server agree to vote for me
 			rf.downVote++
