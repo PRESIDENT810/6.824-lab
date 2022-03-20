@@ -84,6 +84,7 @@ func (rf *Raft) SendHeartbeats(term int) {
 
 		entries := make([]Log, 0)               // heartbeat should carry no log, if not match, resending will carry logs
 		id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
+		rf.newestAppendEntriesRPCID[server] = id
 		args := AppendEntriesArgs{
 			term,
 			leaderId,
@@ -218,10 +219,6 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 
 	rf.LogSendAppendEntriesIn(server, args, reply)
 	defer rf.LogSendAppendEntriesOut(server, args, reply)
-
-	if rf.newestAppendEntriesRPCID[server] > args.RPCID {
-		return
-	}
 
 	if args.Term != rf.currentTerm || rf.role != LEADER { // a long winding path of blood, sweat, tears and despair
 		return
