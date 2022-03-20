@@ -50,13 +50,15 @@ func (rf *Raft) SendHeartbeats(term int) {
 			snapshot := make([]byte, len(rf.snapshot))
 			copy(snapshot, rf.snapshot)
 
+			id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
+			rf.newestInstallSnapshotRPCID[server] = id
 			args := InstallSnapshotArgs{
 				term,
 				leaderId,
 				rf.lastIncludedIndex,
 				rf.lastIncludeTerm,
 				snapshot,
-				atomic.AddInt64(&serialNumber, 1),
+				id,
 			}
 			reply := InstallSnapshotReply{}
 			go rf.SendInstallSnapshot(server, args, reply)
@@ -144,13 +146,15 @@ func (rf *Raft) RequestReplication(term int) {
 			// this is because rf.logs might be empty, and the consequent handling will be troublesome
 			// thus we just install snapshot to make it easier
 
+			id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
+			rf.newestInstallSnapshotRPCID[server] = id
 			args := InstallSnapshotArgs{
 				term,
 				leaderId,
 				rf.lastIncludedIndex,
 				rf.lastIncludeTerm,
 				rf.snapshot,
-				atomic.AddInt64(&serialNumber, 1),
+				id,
 			}
 			reply := InstallSnapshotReply{}
 			go rf.SendInstallSnapshot(server, args, reply)
@@ -273,13 +277,15 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 			// this is because rf.logs might be empty, and the consequent handling will be troublesome
 			// thus we just install snapshot to make it easier
 
+			id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
+			rf.newestInstallSnapshotRPCID[server] = id
 			args := InstallSnapshotArgs{
 				term,
 				leaderId,
 				rf.lastIncludedIndex,
 				rf.lastIncludeTerm,
 				rf.snapshot,
-				atomic.AddInt64(&serialNumber, 1),
+				id,
 			}
 			reply := InstallSnapshotReply{}
 			go rf.SendInstallSnapshot(server, args, reply)
@@ -411,10 +417,6 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 
 	rf.LogSendRequestVoteIn(server, args, reply)
 	defer rf.LogSendRequestVoteOut(server, args, reply)
-
-	if rf.newestRequestVoteRPCID[server] > args.RPCID {
-		return
-	}
 
 	if args.Term != rf.currentTerm { // a long winding path of blood, sweat, tears and despair
 		return
