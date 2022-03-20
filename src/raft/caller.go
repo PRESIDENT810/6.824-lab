@@ -449,10 +449,12 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 					rf.nextIndex[idx] = args.LastLogIndex + 1 // initialize nextIndex to leader last log index+1
 					rf.matchIndex[idx] = 0                    // initialize matchIndex to 0
 				}
-				go rf.SetCommitter()                 // set a committer to periodically check if the commitIndex can be incremented
-				go rf.heartbeatTicker()              // set a ticker as leader for periodically sending heartbeat
-				go rf.SendHeartbeats(rf.currentTerm) // upon election, send initial heartbeat to each server
-				rf.resetHeartbeatTimer()
+				go rf.SetCommitter()    // set a committer to periodically check if the commitIndex can be incremented
+				go rf.heartbeatTicker() // set a ticker as leader for periodically sending heartbeat
+				// we need to send heartbeat as soon as possible
+				rf.heartbeatExpired = true
+				//go rf.SendHeartbeats(rf.currentTerm) // upon election, send initial heartbeat to each server
+				//rf.resetHeartbeatTimer()
 			}
 		} else { // this server agree to vote for me
 			rf.downVote++
@@ -670,6 +672,89 @@ func (rf *Raft) SendInstallSnapshot(server int, args InstallSnapshotArgs, reply 
 	// So now we should sync logs after LastIncludedIndex
 	rf.nextIndex[server] = args.LastIncludedIndex + 1
 
-	// Snapshot has been synced, but we still need to sync entries after snapshot
-	//rf.SendHeartbeats(server)
+	if rf.matchIndex[server] != len(rf.logs)+rf.lastIncludedIndex { // if not matched, keep sending AppendEntries to force it to match
+		// since this is re-sending, you need to reset you arguments since they might change
+		term := rf.currentTerm // my term
+		leaderId := rf.me      // current leader, which is me
+		nextIndex := rf.nextIndex[server]
+		actualNextIndex := nextIndex - rf.lastIncludedIndex - 1
+		prevLogIndex := nextIndex - 1
+		var prevLogTerm int
+		var entries []Log
+
+		// we need to know the prevLogTerm, but the log entry of prefLogIndex may be already compacted in snapshot
+		if prevLogIndex < rf.lastIncludedIndex {
+			// actual index:            0 1 2
+			// log:         0 1 2 3 4 5 6 7 8
+			// snapshot:    |---------|
+			// prevLogIndex:      |
+			// nextIndex:           |
+			// entries:             |-------|
+			// lastIncludedIndex = 5, prevLogTerm = 3, leader has already discarded the next log entry that it needs to send
+			// we don't know what's the term of prevLogIndex since it is in the snapshot, and we cannot send log of index 4, 5
+			// so we just install snapshot and return
+
+			// Note: if prevLogIndex == lastIncludedIndex, we still need to install snapshot
+			// this is because rf.logs might be empty, and the consequent handling will be troublesome
+			// thus we just install snapshot to make it easier
+
+			id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
+			rf.newestInstallSnapshotRPCID[server] = id
+			args := InstallSnapshotArgs{
+				term,
+				leaderId,
+				rf.lastIncludedIndex,
+				rf.lastIncludeTerm,
+				rf.snapshot,
+				id,
+			}
+			reply := InstallSnapshotReply{}
+			go rf.SendInstallSnapshot(server, args, reply)
+			return
+		} else if prevLogIndex == rf.lastIncludedIndex {
+			prevLogTerm = rf.lastIncludeTerm
+		} else { // prevLogIndex > rf.lastIncludedIndex
+			// actual index:            0 1 2
+			// log:         0 1 2 3 4 5 6 7 8
+			// snapshot:    |---------|
+			// prevLogIndex:            |
+			// nextIndex:                 |
+			// entries:                   |-|
+			// lastIncludedIndex = 5, prevLogTerm = 6, leader still has the next log entry that it needs to send
+			// the actual index of logs to send is 6-5 = 1
+
+			// Node: if prevLogIndex > rf.lastIncludedIndex, rf.logs will never be empty
+			// because prefLogIndex < len(rf.logs) (before compaction) = lastIncludedIndex+len(rf.logs)+1 (after compaction)
+			// if rf.logs is empty, len(rf.logs) == 0, prefLogIndex < lastIncludedIndex+1, prefLogIndex <= lastIncludedIndex
+			// and this case is already handled
+
+			actualIndex := prevLogIndex - rf.lastIncludedIndex - 1
+			if actualIndex == -1 {
+				prevLogTerm = rf.lastIncludeTerm
+			} else {
+				prevLogTerm = rf.logs[actualIndex].Term
+			}
+			prevLogTerm = rf.logs[actualIndex].Term // term of prevLogIndex entry
+			actualNextIndex = actualIndex + 1
+			nextIndex = actualIndex + rf.lastIncludedIndex + 1
+		}
+
+		entries = rf.logs[actualNextIndex:] // send the log entry with nextIndex, since follower doesn't match, nextIndex won't exceed len(rf.log)
+		entriesCopy := make([]Log, len(entries))
+		copy(entriesCopy, entries)
+		leaderCommit := rf.commitIndex
+		id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
+		rf.newestRequestVoteRPCID[server] = id
+		args := AppendEntriesArgs{
+			term,
+			leaderId,
+			prevLogIndex,
+			prevLogTerm,
+			entriesCopy,
+			leaderCommit,
+			id,
+		}
+		reply := AppendEntriesReply{}
+		go rf.SendAppendEntries(server, args, reply) // resend AppendEntries RPC
+	}
 }
