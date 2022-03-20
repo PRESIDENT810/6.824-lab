@@ -161,7 +161,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 		rf.logs = append(rf.logs, Log{rf.currentTerm, command}) // log to replicate to the cluster
 		rf.persist(nil)                                         // logs are changed, so I need to save my states
 		rf.resetHeartbeatTimer()
-		go rf.RequestReplication(rf.currentTerm)
+		rf.RequestReplication(rf.currentTerm)
 	}
 
 	return index, term, isLeader
@@ -266,8 +266,8 @@ func (rf *Raft) MainRoutine() {
 		switch rf.role {
 		case LEADER: // if you are a leader, then you should send heartbeats
 			if rf.heartbeatExpired {
+				rf.SendHeartbeats(rf.currentTerm)
 				rf.resetHeartbeatTimer()
-				go rf.SendHeartbeats(rf.currentTerm)
 			}
 			rf.mu.Unlock()
 			time.Sleep(20 * time.Millisecond)
