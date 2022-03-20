@@ -151,7 +151,7 @@ func (rf *Raft) electionTicker() {
 
 //
 func (rf *Raft) heartbeatTicker() {
-	timeout := 125             // generate a random timeout threshold between 150 to 300ms
+	timeout := 100             // generate a random timeout threshold between 150 to 300ms
 	for rf.killed() == false { // if the raft instance is killed, it means this test is finished and we should quit
 		time.Sleep(5 * time.Millisecond) // sleep a while to save some CPU time
 		rf.mu.Lock()
