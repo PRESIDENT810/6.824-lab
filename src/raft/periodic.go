@@ -14,6 +14,9 @@ import (
 func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 	for !rf.killed() {
 		time.Sleep(10 * time.Millisecond)
+		rf.mu.Lock()
+		rf.LogSetApplierIn()
+		rf.mu.Unlock()
 		for {
 			rf.mu.Lock()
 			if rf.lastApplied < rf.commitIndex { // there is log committed but not applied
@@ -47,6 +50,9 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 				break
 			}
 		}
+		rf.mu.Lock()
+		rf.LogSetApplierIn()
+		rf.mu.Unlock()
 	}
 }
 
@@ -67,6 +73,7 @@ func (rf *Raft) SetCommitter() {
 			rf.mu.Unlock()
 			return
 		}
+		rf.LogSetCommitterIn()
 		// N must not exceed log's bound
 		// INDEX:    0 1 2 3 4 5 6 7
 		// =========================
@@ -93,6 +100,7 @@ func (rf *Raft) SetCommitter() {
 			}
 			N--
 		}
+		rf.LogSetCommitterOut()
 		rf.mu.Unlock()
 		time.Sleep(10 * time.Millisecond)
 	}
