@@ -55,4 +55,8 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 
 	// persist
 	rf.persist(snapshot)
+
+	if rf.role == LEADER {
+		rf.RequestReplication(rf.currentTerm)
+	}
 }
