@@ -319,7 +319,6 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		copy(entriesCopy, entries)
 		leaderCommit := rf.commitIndex
 		id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
-		rf.newestRequestVoteRPCID[server] = id
 		args = AppendEntriesArgs{
 			term,
 			leaderId,
@@ -694,7 +693,6 @@ func (rf *Raft) SendInstallSnapshot(server int, args InstallSnapshotArgs, reply 
 		copy(entriesCopy, entries)
 		leaderCommit := rf.commitIndex
 		id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
-		rf.newestRequestVoteRPCID[server] = id
 		args := AppendEntriesArgs{
 			term,
 			leaderId,

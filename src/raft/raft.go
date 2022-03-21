@@ -106,6 +106,8 @@ type Raft struct {
 	heartbeatExpired  bool
 
 	// for ignore outdated RPC response
+	newestResendPrevLogIndex []int
+
 	newestAppendEntriesRPCID   []int64
 	newestRequestVoteRPCID     []int64
 	newestInstallSnapshotRPCID []int64
@@ -160,8 +162,8 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	if isLeader {
 		rf.logs = append(rf.logs, Log{rf.currentTerm, command}) // log to replicate to the cluster
 		rf.persist(nil)                                         // logs are changed, so I need to save my states
-		rf.resetHeartbeatTimer()
-		rf.RequestReplication(rf.currentTerm)
+		//rf.resetHeartbeatTimer()
+		//rf.RequestReplication(rf.currentTerm)
 	}
 
 	return index, term, isLeader
@@ -238,6 +240,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
+	rf.newestResendPrevLogIndex = make([]int, len(peers))
 	rf.newestAppendEntriesRPCID = make([]int64, len(peers))
 	rf.newestRequestVoteRPCID = make([]int64, len(peers))
 	rf.newestInstallSnapshotRPCID = make([]int64, len(peers))
