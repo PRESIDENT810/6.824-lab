@@ -49,9 +49,9 @@ func (rf *Raft) persist(snapshot []byte) {
 	rf.LogPersist(ps)
 	// Never use an empty snapshot to overwrite a valid snapshot
 	if snapshot == nil {
-		rf.persister.SaveRaftState(data)
+		go rf.persister.SaveRaftState(data)
 	} else {
-		rf.persister.SaveStateAndSnapshot(data, snapshot)
+		go rf.persister.SaveStateAndSnapshot(data, snapshot)
 	}
 }
 
