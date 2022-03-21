@@ -1030,6 +1030,9 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 		}
 
 		if disconnect {
+			cfg.rafts[i].mu.Lock()
+			cfg.rafts[i].verbose = true
+			cfg.rafts[i].mu.Unlock()
 			cfg.disconnect(victim)
 			cfg.one(rand.Int(), servers-1, true)
 		}

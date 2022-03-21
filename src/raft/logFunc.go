@@ -37,7 +37,7 @@ var logConfig = LogConfig{
 	false,
 	true,
 	false,
-	true,
+	false,
 	false,
 }
 
@@ -106,7 +106,26 @@ func LogRaft(rf *Raft) {
 
 // Log utility functions for callers
 
+func (rf *Raft) LogSendAppendEntriesPerpare(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
+	if !rf.verbose {
+		return
+	}
+	if logConfig.EnableLogSendAppendEntries {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] prepares SendAppendEntries with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
+		LogStruct(args)
+		LogRaft(rf)
+	}
+}
+
 func (rf *Raft) LogSendAppendEntriesIn(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogSendAppendEntries {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -121,6 +140,9 @@ func (rf *Raft) LogSendAppendEntriesIn(server int, args AppendEntriesArgs, reply
 }
 
 func (rf *Raft) LogSendAppendEntriesOut(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogSendAppendEntries {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -133,6 +155,9 @@ func (rf *Raft) LogSendAppendEntriesOut(server int, args AppendEntriesArgs, repl
 }
 
 func (rf *Raft) LogSendRequestVoteIn(server int, args RequestVoteArgs, reply RequestVoteReply) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogSendRequestVote {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -147,6 +172,9 @@ func (rf *Raft) LogSendRequestVoteIn(server int, args RequestVoteArgs, reply Req
 }
 
 func (rf *Raft) LogSendRequestVoteOut(server int, args RequestVoteArgs, reply RequestVoteReply) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogSendRequestVote {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -160,7 +188,26 @@ func (rf *Raft) LogSendRequestVoteOut(server int, args RequestVoteArgs, reply Re
 	}
 }
 
+func (rf *Raft) LogSendInstallSnapshotPrepare(server int, args InstallSnapshotArgs, reply InstallSnapshotReply) {
+	if !rf.verbose {
+		return
+	}
+	if logConfig.EnableLogSendInstallSnapshot {
+		LogMutex.Lock()
+		defer LogMutex.Unlock()
+		fmt.Println("")
+		log.Println("====================================================================")
+		defer log.Println("====================================================================")
+		log.Printf("[Server %d] prepares SendInstallSnapshot with [RPCID %d] -> {Server %d}\n", rf.me, args.RPCID, server)
+		LogStruct(args)
+		LogRaft(rf)
+	}
+}
+
 func (rf *Raft) LogSendInstallSnapshotIn(server int, args InstallSnapshotArgs, reply InstallSnapshotReply) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogSendInstallSnapshot {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -175,6 +222,9 @@ func (rf *Raft) LogSendInstallSnapshotIn(server int, args InstallSnapshotArgs, r
 }
 
 func (rf *Raft) LogSendInstallSnapshotOut(server int, args InstallSnapshotArgs, reply InstallSnapshotReply) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogSendInstallSnapshot {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -189,6 +239,9 @@ func (rf *Raft) LogSendInstallSnapshotOut(server int, args InstallSnapshotArgs, 
 // Log utility functions for handlers
 
 func (rf *Raft) LogAppendEntriesIn(args AppendEntriesArgs, reply AppendEntriesReply) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogAppendEntries {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -202,6 +255,9 @@ func (rf *Raft) LogAppendEntriesIn(args AppendEntriesArgs, reply AppendEntriesRe
 }
 
 func (rf *Raft) LogAppendEntriesOut(server int, args AppendEntriesArgs, reply AppendEntriesReply) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogAppendEntries {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -215,6 +271,9 @@ func (rf *Raft) LogAppendEntriesOut(server int, args AppendEntriesArgs, reply Ap
 }
 
 func (rf *Raft) LogRequestVoteIn(server int, args RequestVoteArgs, reply RequestVoteReply) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogRequestVote {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -228,6 +287,9 @@ func (rf *Raft) LogRequestVoteIn(server int, args RequestVoteArgs, reply Request
 }
 
 func (rf *Raft) LogRequestVoteOut(server int, args RequestVoteArgs, reply RequestVoteReply) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogRequestVote {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -243,6 +305,9 @@ func (rf *Raft) LogRequestVoteOut(server int, args RequestVoteArgs, reply Reques
 }
 
 func (rf *Raft) LogInstallSnapshotIn(server int, args InstallSnapshotArgs, reply InstallSnapshotReply) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogInstallSnapshot {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -256,6 +321,9 @@ func (rf *Raft) LogInstallSnapshotIn(server int, args InstallSnapshotArgs, reply
 }
 
 func (rf *Raft) LogInstallSnapshotOut(server int, args InstallSnapshotArgs, reply InstallSnapshotReply) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogInstallSnapshot {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -271,6 +339,9 @@ func (rf *Raft) LogInstallSnapshotOut(server int, args InstallSnapshotArgs, repl
 // Log utility functions for persistence
 
 func (rf *Raft) LogPersist(ps PersistentState) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogPersist {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -284,6 +355,9 @@ func (rf *Raft) LogPersist(ps PersistentState) {
 }
 
 func (rf *Raft) LogReadPersist(ps PersistentState) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogPersist {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -299,6 +373,9 @@ func (rf *Raft) LogReadPersist(ps PersistentState) {
 // Log utility functions for snapshot
 
 func (rf *Raft) LogSnapshotIn(index int) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogSnapshot {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -311,6 +388,9 @@ func (rf *Raft) LogSnapshotIn(index int) {
 }
 
 func (rf *Raft) LogSnapshotOut(index int) {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogSnapshot {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -325,6 +405,9 @@ func (rf *Raft) LogSnapshotOut(index int) {
 // Log utlity functions for periodic
 
 func (rf *Raft) LogSetCommitterIn() {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogPeriodic {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -336,6 +419,9 @@ func (rf *Raft) LogSetCommitterIn() {
 }
 
 func (rf *Raft) LogSetCommitterOut() {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogPeriodic {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -347,6 +433,9 @@ func (rf *Raft) LogSetCommitterOut() {
 }
 
 func (rf *Raft) LogSetApplierIn() {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogPeriodic {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()
@@ -358,6 +447,9 @@ func (rf *Raft) LogSetApplierIn() {
 }
 
 func (rf *Raft) LogSetApplierOut() {
+	if !rf.verbose {
+		return
+	}
 	if logConfig.EnableLogPeriodic {
 		LogMutex.Lock()
 		defer LogMutex.Unlock()

@@ -134,38 +134,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		return
 	}
 
-	// Special treatment: I have an entry at prevLogIndex, but is in my snapshot
-	// INDEX:    0 1 2 3 4 5 6 7 8 9 	<=========================> 	INDEX:    0 1 2 3 4 5 6 7 8 9
-	// =============================									=============================
-	// LEADER:   1 1 1 2 2 4 4 4										LEADER:   1 1 1 2 2 4 4 4
-	// =============================									=============================
-	// entriesIndex:     0 1 2 3 4 5									entriesIndex:     0 1 2 3 4 5
-	// Entries:          2 2 4 4 5 5									Entries:            2 4 4 5 5
-	// prevLogIndex:   |												prevLogIndex:     |
-	// =============================									=============================
-	// Actual:             0 1 2 3 4									Actual:             0 1 2 3 4
-	// FOLLOWER:           2 3 3										FOLLOWER:           2 3 3
-	// Snapshot: 1 1 1 2 2												Snapshot: 1 1 1 2 2
-	// The two cases above are equivalent, because what's in snapshot must be valid log entries
-	// prevLogIndex = 3, lastIncludedIndex = 4, trimFrom = 1 for args.Entries
 	if prevLogIndex < rf.lastIncludedIndex {
-		trimFrom := rf.lastIncludedIndex - prevLogIndex
-		prevLogIndex = rf.lastIncludedIndex
-		args.PrevLogTerm = args.Entries[trimFrom-1].Term
-		// INDEX:    0 1 2 3 4 5 6 7 8 9
-		// =============================
-		// LEADER:   1 1 1 2 2 4 4 4
-		// =============================
-		// entriesIndex:     0 1 2 3 4 5
-		// entries:          2 2 4 4
-		// prevLogIndex:   |
-		// =============================
-		// Actual:                   0 1 2 3 4
-		// FOLLOWER:
-		// Snapshot: 1 1 1 2 2 2 4 4
-		// prevLogIndex = 3, lastIncludedIndex = 7, trimFrom = 4
-		// no need to append new log entries, since there is nothing to append
-		args.Entries = args.Entries[trimFrom:]
+		// This is impossible, because if log entries are in snapshot, they must be committed first,
+		// and when they are committed, I must have returned a LEADER with reply.success = true;
+		// thus, leader will increase my matchIndex here, so he can't send me log entries ahead of this point
+		panic("fuck")
 	}
 	// The following code ensures that rf.lastIncludedIndex <= prevLogIndex
 

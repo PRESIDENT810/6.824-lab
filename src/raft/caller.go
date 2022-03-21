@@ -204,7 +204,9 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 	if rf.killed() { // if raft instance is dead, then no need to sending RPCs
 		return
 	}
-
+	rf.mu.Lock()
+	rf.LogSendAppendEntriesPerpare(server, args, reply)
+	rf.mu.Unlock()
 	success := rf.peers[server].Call("Raft.AppendEntries", &args, &reply)
 
 	if !success { // RPC failed
@@ -622,6 +624,10 @@ func (rf *Raft) SendInstallSnapshot(server int, args InstallSnapshotArgs, reply 
 	if rf.killed() { // if raft instance is dead, then no need to sending RPCs
 		return
 	}
+
+	rf.mu.Lock()
+	rf.LogSendInstallSnapshotPrepare(server, args, reply)
+	rf.mu.Unlock()
 
 	success := rf.peers[server].Call("Raft.InstallSnapshot", &args, &reply)
 

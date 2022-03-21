@@ -111,6 +111,9 @@ type Raft struct {
 	newestAppendEntriesRPCID   []int64
 	newestRequestVoteRPCID     []int64
 	newestInstallSnapshotRPCID []int64
+
+	// for output log
+	verbose bool
 }
 
 // GetState
@@ -248,6 +251,8 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	go rf.electionTicker()    // set a timer to calculate elapsed time for election
 	go rf.SetApplier(applyCh) // set an applier to apply logs (send through applyCh)
 	go rf.MainRoutine()       // start raft instance's main routine
+
+	rf.verbose = false
 
 	return rf
 }
