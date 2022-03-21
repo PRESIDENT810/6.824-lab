@@ -150,7 +150,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	//fmt.Printf("[server %d]: calling one with cmd %v\n", rf.me, command)
+	Printf("[server %d]: calling one with cmd %v\n", rf.me, command)
 	// log         : 0 1 2 3 4 5 6 7 8 9
 	// ActualIndex:              0 1 2 3
 	// entries:                  |---|
@@ -165,8 +165,8 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	if isLeader {
 		rf.logs = append(rf.logs, Log{rf.currentTerm, command}) // log to replicate to the cluster
 		rf.persist(nil)                                         // logs are changed, so I need to save my states
-		//rf.resetHeartbeatTimer()
-		//rf.RequestReplication(rf.currentTerm)
+		rf.resetHeartbeatTimer()
+		rf.RequestReplication(rf.currentTerm)
 	}
 
 	return index, term, isLeader

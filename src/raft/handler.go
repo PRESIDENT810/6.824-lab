@@ -128,17 +128,21 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	prevLogIndex := args.PrevLogIndex // use a local variable to store prevLogIndex for efficiency
 
 	// my snapshot includes all entries you send me, this packet may be outdated
-	if rf.lastIncludedIndex > len(args.Entries)+prevLogIndex {
+	if rf.lastIncludedIndex >= len(args.Entries)+prevLogIndex {
 		reply.Term = rf.currentTerm
 		reply.Success = true
 		return
 	}
 
 	if prevLogIndex < rf.lastIncludedIndex {
-		// This is impossible, because if log entries are in snapshot, they must be committed first,
-		// and when they are committed, I must have returned a LEADER with reply.success = true;
-		// thus, leader will increase my matchIndex here, so he can't send me log entries ahead of this point
-		panic("fuck")
+		// leader没snapshot，发送AppendEntries，但是这个RPC延迟了
+		// leader刚刚snapshot完，发现刚才的nextIndex现在在自己的snapshot里了，因此发送InstallSnapshot，
+		// 这个snapshot要比nextIndex大，follower接受之后返回
+		// 这时第一个AppendEntries到达follower处，产生prevLogIndex小于follower的lastIncludeIndex的情况
+		// 这种情况直接返回就可以处理？因为后面的心跳也会进行同步的 所以那个被延迟的RPC不管他应该也是可以正常同步的吧
+		reply.Term = rf.currentTerm
+		reply.Success = true
+		return
 	}
 	// The following code ensures that rf.lastIncludedIndex <= prevLogIndex
 
