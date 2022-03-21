@@ -1030,10 +1030,11 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 		}
 
 		if disconnect {
-			cfg.rafts[i].mu.Lock()
-			cfg.rafts[i].verbose = true
-			cfg.rafts[i].mu.Unlock()
+			//cfg.rafts[i].mu.Lock()
+			//cfg.rafts[i].verbose = true
+			//cfg.rafts[i].mu.Unlock()
 			cfg.disconnect(victim)
+			Printf("victim %d is disconnected\n", victim)
 			cfg.one(rand.Int(), servers-1, true)
 		}
 		if crash {
@@ -1054,6 +1055,7 @@ func snapcommon(t *testing.T, name string, disconnect bool, reliable bool, crash
 			// reconnect a follower, who maybe behind and
 			// needs to rceive a snapshot to catch up.
 			cfg.connect(victim)
+			Printf("victim %d is connected\n", victim)
 			cfg.one(rand.Int(), servers, true)
 			leader1 = cfg.checkOneLeader()
 		}

@@ -248,11 +248,11 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.newestRequestVoteRPCID = make([]int64, len(peers))
 	rf.newestInstallSnapshotRPCID = make([]int64, len(peers))
 
+	rf.verbose = true
+
 	go rf.electionTicker()    // set a timer to calculate elapsed time for election
 	go rf.SetApplier(applyCh) // set an applier to apply logs (send through applyCh)
 	go rf.MainRoutine()       // start raft instance's main routine
-
-	rf.verbose = false
 
 	return rf
 }
