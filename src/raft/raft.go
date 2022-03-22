@@ -165,8 +165,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	if isLeader {
 		rf.logs = append(rf.logs, Log{rf.currentTerm, command}) // log to replicate to the cluster
 		rf.persist(nil)                                         // logs are changed, so I need to save my states
-		rf.resetHeartbeatTimer()
-		rf.RequestReplication(rf.currentTerm)
 	}
 
 	return index, term, isLeader
