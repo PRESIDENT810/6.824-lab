@@ -22,7 +22,7 @@ import (
 	"time"
 )
 import "sync/atomic"
-import "labrpc"
+import "mit-6.824/labrpc"
 
 // ApplyMsg
 //

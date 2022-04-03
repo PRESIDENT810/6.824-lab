@@ -1,10 +1,10 @@
 package kvraft
 
 import (
-	"labgob"
-	"labrpc"
 	"log"
-	"raft"
+	"mit-6.824/labgob"
+	"mit-6.824/labrpc"
+	"mit-6.824/raft"
 	"sync"
 	"sync/atomic"
 )
@@ -44,6 +44,7 @@ func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
 	// Your code here.
 }
 
+// Kill
 //
 // the tester calls Kill() when a KVServer instance won't
 // be needed again. for your convenience, we supply
@@ -65,6 +66,7 @@ func (kv *KVServer) killed() bool {
 	return z == 1
 }
 
+// StartKVServer
 //
 // servers[] contains the ports of the set of
 // servers that will cooperate via Raft to

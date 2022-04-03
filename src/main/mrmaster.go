@@ -9,7 +9,7 @@ package main
 // Please do not change this file.
 //
 
-import "mr"
+import "mit-6.824/mr"
 import "time"
 import "os"
 import "fmt"

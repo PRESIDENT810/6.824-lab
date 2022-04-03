@@ -18,7 +18,7 @@ package main
 // and restart them to exercise fault tolerance.
 //
 
-import "pbservice"
+import "mit-6.824/pbservice"
 import "os"
 import "fmt"
 

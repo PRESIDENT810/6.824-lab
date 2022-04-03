@@ -16,7 +16,7 @@ package main
 //   -r restart
 
 import "time"
-import "diskv"
+import "mit-6.824/diskv"
 import "os"
 import "fmt"
 import "strconv"

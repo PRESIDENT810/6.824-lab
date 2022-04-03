@@ -7,7 +7,7 @@ package main
 //
 
 import "fmt"
-import "mr"
+import "mit-6.824/mr"
 import "os"
 import "log"
 import "io/ioutil"

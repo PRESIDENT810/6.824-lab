@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"log"
 )
-import "labgob"
+import "mit-6.824/labgob"
 
 // PersistentState
 //

@@ -1,9 +1,9 @@
 package shardmaster
 
-import "raft"
-import "labrpc"
+import "mit-6.824/raft"
+import "mit-6.824/labrpc"
 import "sync"
-import "labgob"
+import "mit-6.824/labgob"
 
 type ShardMaster struct {
 	mu      sync.Mutex

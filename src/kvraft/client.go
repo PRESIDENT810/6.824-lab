@@ -1,6 +1,6 @@
 package kvraft
 
-import "labrpc"
+import "mit-6.824/labrpc"
 import "crypto/rand"
 import "math/big"
 
@@ -23,6 +23,7 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	return ck
 }
 
+// Get
 //
 // fetch the current value for a key.
 // returns "" if the key does not exist.
@@ -41,6 +42,7 @@ func (ck *Clerk) Get(key string) string {
 	return ""
 }
 
+// PutAppend
 //
 // shared by Put and Append.
 //
