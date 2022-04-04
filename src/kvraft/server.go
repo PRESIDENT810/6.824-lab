@@ -1,22 +1,12 @@
 package kvraft
 
 import (
-	"log"
 	"mit-6.824/labgob"
 	"mit-6.824/labrpc"
 	"mit-6.824/raft"
 	"sync"
 	"sync/atomic"
 )
-
-const Debug = false
-
-func DPrintf(format string, a ...interface{}) (n int, err error) {
-	if Debug {
-		log.Printf(format, a...)
-	}
-	return
-}
 
 type Op struct {
 	// Your definitions here.

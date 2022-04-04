@@ -3,6 +3,7 @@ package kvraft
 import "mit-6.824/labrpc"
 import "crypto/rand"
 import "math/big"
+import "sync/atomic"
 
 type Clerk struct {
 	servers []*labrpc.ClientEnd
@@ -23,6 +24,8 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 	return ck
 }
 
+var OperationID int64 = 0
+
 // Get
 //
 // fetch the current value for a key.
@@ -39,6 +42,30 @@ func MakeClerk(servers []*labrpc.ClientEnd) *Clerk {
 func (ck *Clerk) Get(key string) string {
 
 	// You will have to modify this function.
+
+	// Generate an unique operation identifier for each client request
+	id := atomic.AddInt64(&OperationID, 1)
+
+	args := GetArgs{key, id}
+	reply := GetReply{}
+
+	serverIdx := -1
+	for {
+		serverIdx = (serverIdx + 1) % len(ck.servers)
+		ok := ck.servers[serverIdx].Call("KVServer.Get", &args, &reply)
+		// If I sent an RPC to the wrong kvserver or cannot reach the kvserver, retry by sending to a different kvserver
+		if !ok || reply.Err == ErrWrongLeader {
+			continue
+		}
+		if reply.Err == ErrNoKey {
+			return ""
+		}
+		if reply.Err == OK {
+			return reply.Value
+		}
+		panic("Unrecognized reply error")
+	}
+
 	return ""
 }
 
@@ -55,6 +82,28 @@ func (ck *Clerk) Get(key string) string {
 //
 func (ck *Clerk) PutAppend(key string, value string, op string) {
 	// You will have to modify this function.
+
+	// Generate an unique operation identifier for each client request
+	id := atomic.AddInt64(&OperationID, 1)
+
+	args := PutAppendArgs{key, value, op, id}
+	reply := PutAppendReply{}
+
+	serverIdx := -1
+	for {
+		serverIdx = (serverIdx + 1) % len(ck.servers)
+		ok := ck.servers[serverIdx].Call("KVServer.PutAppend", &args, &reply)
+		// If I sent an RPC to the wrong kvserver or cannot reach the kvserver, retry by sending to a different kvserver
+		if !ok || reply.Err == ErrWrongLeader {
+			continue
+		}
+		if reply.Err == OK {
+			return
+		}
+		panic("Unrecognized reply error")
+	}
+
+	return
 }
 
 func (ck *Clerk) Put(key string, value string) {
