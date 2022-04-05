@@ -156,6 +156,8 @@ func (kv *KVServer) Append(args *AppendArgs, reply *AppendReply) {
 		reply.Err = ErrWrongLeader
 		return
 	}
+	// TODO: manually invoke kv.rf.RequestReplication, this is because if we call RequestReplication in Start(),
+	// we cannot pass TestCount2B, so we have to call it here to avoid failing that test
 
 	// By comparing the commandID of the command we sent and the command actually applied,
 	// we can determine whether our command is successfully broadcast to all raft peers
@@ -168,6 +170,8 @@ func (kv *KVServer) Append(args *AppendArgs, reply *AppendReply) {
 	}
 	kv.controller.RegisterCallback(index, callback)
 
+	// TODO: when a leader is chosen, it should write an no-op, otherwise it won't commit logs that are not in its term,
+	// therefore these commands will not be applied so kvserver will not get anything from this channel
 	success := <-channel
 	if success {
 		kv.mu.Lock()
