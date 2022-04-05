@@ -19,13 +19,17 @@ type Storage interface {
 type MapStorage struct {
 	m  map[string]string
 	mu sync.Mutex
+	me int
 }
 
 // Get
 //
 // Fetches the current value for the key; a Get for a non-existent key should return an empty string.
 func (ms *MapStorage) Get(key string) string {
+	defer ms.LogStorage("Get")
 	ms.mu.Lock()
+	ms.LogStorageMutexLock()
+	defer ms.LogStorageMutexUnlock()
 	defer ms.mu.Unlock()
 	if value, ok := ms.m[key]; ok {
 		return value
@@ -37,7 +41,10 @@ func (ms *MapStorage) Get(key string) string {
 //
 // Set the value corresponding to our key to our value
 func (ms *MapStorage) Put(key string, value string) {
+	defer ms.LogStorage("Put")
 	ms.mu.Lock()
+	ms.LogStorageMutexLock()
+	defer ms.LogStorageMutexUnlock()
 	defer ms.mu.Unlock()
 	ms.m[key] = value
 	return
@@ -47,7 +54,10 @@ func (ms *MapStorage) Put(key string, value string) {
 //
 // Append arg to key's value; appending to a non-existent key should act like Put.
 func (ms *MapStorage) Append(key string, value string) {
+	defer ms.LogStorage("Append")
 	ms.mu.Lock()
+	ms.LogStorageMutexLock()
+	defer ms.LogStorageMutexUnlock()
 	defer ms.mu.Unlock()
 	if oldValue, ok := ms.m[key]; ok {
 		ms.m[key] = oldValue + value

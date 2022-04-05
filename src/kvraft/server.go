@@ -75,9 +75,9 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.maxraftstate = maxraftstate
 
 	// You may need initialization code here.
-	kv.storage = &MapStorage{make(map[string]string), sync.Mutex{}}
+	kv.storage = &MapStorage{make(map[string]string), sync.Mutex{}, kv.me}
 	kv.mu = sync.Mutex{}
-	kv.controller = &CallbackController{make(map[int][]func(int64)), sync.Mutex{}}
+	kv.controller = &CallbackController{make(map[int][]func(int64)), sync.Mutex{}, kv.me}
 
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)

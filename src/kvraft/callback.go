@@ -18,6 +18,7 @@ import (
 type CallbackController struct {
 	CallbackMap map[int][]func(int64)
 	mu          sync.Mutex
+	me          int
 }
 
 // RegisterCallback
@@ -26,6 +27,8 @@ type CallbackController struct {
 // This function register a callback function to be invoked when raft applies a command with the same index
 func (controller *CallbackController) RegisterCallback(index int, callback func(commandID int64)) {
 	controller.mu.Lock()
+	controller.LogCallbackMutexLock()
+	defer controller.LogCallbackMutexUnlock()
 	defer controller.mu.Unlock()
 	if _, ok := controller.CallbackMap[index]; ok {
 		controller.CallbackMap[index] = append(controller.CallbackMap[index], callback)
@@ -44,6 +47,7 @@ func (kv *KVServer) ApplierReceiver(applyCh chan raft.ApplyMsg) {
 	// Handle received applied message
 	for applyMsg := range applyCh {
 		kv.controller.mu.Lock()
+		kv.controller.LogCallbackMutexLock()
 
 		commandValid := applyMsg.CommandValid
 		command := applyMsg.Command.(Command)
@@ -60,6 +64,7 @@ func (kv *KVServer) ApplierReceiver(applyCh chan raft.ApplyMsg) {
 			// TODO: implement this in lab 3B
 		}
 
+		kv.controller.LogCallbackMutexUnlock()
 		kv.controller.mu.Unlock()
 	}
 }
