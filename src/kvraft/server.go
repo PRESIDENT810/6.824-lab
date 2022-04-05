@@ -24,14 +24,8 @@ type KVServer struct {
 	maxraftstate int // snapshot if log grows this big
 
 	// Your definitions here.
-}
-
-func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
-	// Your code here.
-}
-
-func (kv *KVServer) PutAppend(args *PutAppendArgs, reply *PutAppendReply) {
-	// Your code here.
+	storage    Storage
+	controller *CallbackController
 }
 
 // Kill
@@ -81,11 +75,17 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.maxraftstate = maxraftstate
 
 	// You may need initialization code here.
+	kv.storage = &MapStorage{make(map[string]string), sync.Mutex{}}
+	kv.mu = sync.Mutex{}
+	kv.controller = &CallbackController{make(map[int][]func(int64)), sync.Mutex{}}
 
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
 
 	// You may need initialization code here.
+	go kv.ApplierReceiver(kv.applyCh)
+
+	// TODO: handle exactly-once!
 
 	return kv
 }
