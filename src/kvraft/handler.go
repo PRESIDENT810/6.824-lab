@@ -49,8 +49,20 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 
 	success := <-channel
 	if success {
+		kv.mu.Lock()
+		// Request with same operation ID has been executed
+		if value, ok := kv.requestTracker[args.ID]; ok {
+			kv.mu.Unlock()
+			reply.Value = value
+			reply.Err = OK
+			return
+		}
+		// Track this operation ID in requestTracker
+		value := kv.storage.Get(args.Key)
+		kv.requestTracker[args.ID] = value
 		// The command applied is the one we sent in this function
-		reply.Value = kv.storage.Get(args.Key)
+		reply.Value = value
+		kv.mu.Unlock()
 		reply.Err = OK
 		return
 	} else {
@@ -98,8 +110,19 @@ func (kv *KVServer) Put(args *PutArgs, reply *PutReply) {
 
 	success := <-channel
 	if success {
+		kv.mu.Lock()
+		// Request with same operation ID has been executed
+		if _, ok := kv.requestTracker[args.ID]; ok {
+			kv.mu.Unlock()
+			reply.Err = OK
+			return
+		}
+		// Track this operation ID in requestTracker
+		kv.requestTracker[args.ID] = args.Value
+
 		// The command applied is the one we sent in this function
 		kv.storage.Put(args.Key, args.Value)
+		kv.mu.Unlock()
 		reply.Err = OK
 		return
 	} else {
@@ -147,8 +170,19 @@ func (kv *KVServer) Append(args *AppendArgs, reply *AppendReply) {
 
 	success := <-channel
 	if success {
+		kv.mu.Lock()
+		// Request with same operation ID has been executed
+		if _, ok := kv.requestTracker[args.ID]; ok {
+			kv.mu.Unlock()
+			reply.Err = OK
+			return
+		}
+		// Track this operation ID in requestTracker
+		kv.requestTracker[args.ID] = args.Value
+
 		// The command applied is the one we sent in this function
 		kv.storage.Append(args.Key, args.Value)
+		kv.mu.Unlock()
 		reply.Err = OK
 		return
 	} else {

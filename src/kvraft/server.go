@@ -26,6 +26,9 @@ type KVServer struct {
 	// Your definitions here.
 	storage    Storage
 	controller *CallbackController
+
+	// For exactly-once semantic
+	requestTracker map[int64]string
 }
 
 // Kill
@@ -78,6 +81,7 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.storage = &MapStorage{make(map[string]string), sync.Mutex{}, kv.me}
 	kv.mu = sync.Mutex{}
 	kv.controller = &CallbackController{make(map[int][]func(int64)), sync.Mutex{}, kv.me}
+	kv.requestTracker = make(map[int64]string)
 
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
