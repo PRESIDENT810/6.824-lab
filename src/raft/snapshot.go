@@ -28,7 +28,6 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	rf.LogSnapshotIn(index)
 	defer rf.LogSnapshotOut(index)
 
-	// TODO: why Snapshot has an index less than lastIncludedIndex???
 	if index <= rf.lastIncludedIndex {
 		return
 	}

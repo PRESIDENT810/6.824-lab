@@ -95,13 +95,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.LogAppendEntriesIn(*args, *reply)
 	defer rf.LogAppendEntriesOut(rf.me, *args, *reply)
 
-	// TODO: I think problem is how we deal with index changed by snapshot
-	// Observation:
-	// 1. Even if I let SendSnapshot just return, TestSnapshotBasic2D works fine
-	// 2. RPC counts of TestSnapshotBasic2D are too many
-	// 3. If, when the server comes back up, it reads the updated snapshot, but the outdated log,
-	// it may end up applying some log entries that are already contained within the snapshot (see student guide)
-
 	rf.persist(nil)
 
 	if args.Term < rf.currentTerm { // my term is newer
