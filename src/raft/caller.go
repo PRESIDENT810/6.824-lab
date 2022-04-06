@@ -307,7 +307,7 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 	}
 
 	if rf.role == CANDIDATE { // if there is already a result, then I don't need to check this shit
-		if reply.VoteGranted { // this server agree to vote for me
+		if reply.VoteGranted { // this server agrees to vote for me
 			rf.upVote++
 			if rf.upVote > len(rf.peers)/2 && reply.Term == rf.currentTerm { // I won majority in this term
 				rf.role = LEADER // so I'm a leader now
