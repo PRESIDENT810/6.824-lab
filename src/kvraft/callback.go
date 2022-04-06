@@ -60,6 +60,7 @@ func (kv *KVServer) ApplierReceiver(applyCh chan raft.ApplyMsg) {
 			for _, callback := range kv.controller.CallbackMap[commandIndex] {
 				go callback(command.CommandID)
 			}
+			delete(kv.controller.CallbackMap, commandIndex)
 		} else { // Snapshot
 			// TODO: implement this in lab 3B
 		}
