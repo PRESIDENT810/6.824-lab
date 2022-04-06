@@ -15,6 +15,8 @@ var serialNumber int64 = 0
 // and if the role changes, MainRoutine will know in the switch statement in the next iteration
 //
 func (rf *Raft) SendHeartbeats(term int) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
 	if term != rf.currentTerm { // in case currentTerm is changed by other goroutines before sending RPC
 		return
@@ -37,6 +39,8 @@ func (rf *Raft) SendHeartbeats(term int) {
 // then we commit these logs on the leader side, and followers will commit these in consequent AppendEntries RPCs
 //
 func (rf *Raft) RequestReplication(term int) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 
 	if term != rf.currentTerm { // in case currentTerm is changed by other goroutines before sending RPC
 		return

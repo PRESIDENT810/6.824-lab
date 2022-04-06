@@ -272,7 +272,7 @@ func (rf *Raft) MainRoutine() {
 		switch rf.role {
 		case LEADER: // if you are a leader, then you should send heartbeats
 			if rf.heartbeatExpired {
-				rf.SendHeartbeats(rf.currentTerm)
+				go rf.SendHeartbeats(rf.currentTerm)
 				rf.resetHeartbeatTimer()
 			}
 			rf.mu.Unlock()
