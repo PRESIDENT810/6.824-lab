@@ -1,7 +1,6 @@
 package raft
 
 import (
-	"fmt"
 	"math/rand"
 	"time"
 )
@@ -43,7 +42,6 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 					rf.lastApplied = rf.lastIncludedIndex
 				} else {
 					command := rf.logs[lastActualApplied].Command
-					fmt.Printf("I'm [raft%d] and my log entry %d applied\n", rf.me, rf.lastApplied)
 					applyMsg = ApplyMsg{true, command, rf.lastApplied, false, nil, 0, 0}
 				}
 				rf.mu.Unlock()

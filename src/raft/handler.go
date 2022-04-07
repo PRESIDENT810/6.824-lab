@@ -82,6 +82,9 @@ type InstallSnapshotArgs struct {
 //
 type InstallSnapshotReply struct {
 	Term int // currentTerm, for leader to update itself
+
+	// if this RPC is received before any RPC that was sent after it, then ignore it (the newer RPC will take care)
+	Ignore bool
 }
 
 //
@@ -96,6 +99,14 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	defer rf.LogAppendEntriesOut(rf.me, *args, *reply)
 
 	rf.persist(nil)
+
+	// If receiver receives a newer RPC with larger RPCID, then it should ignore RPC with smaller RPCID since it is outdated
+	if rf.newestAppendEntriesRPCID[args.LeaderId] < args.RPCID {
+		rf.newestAppendEntriesRPCID[args.LeaderId] = args.RPCID
+	} else {
+		reply.Ignore = true
+		return
+	}
 
 	if args.Term < rf.currentTerm { // my term is newer
 		reply.Term = rf.currentTerm // return my current term to update the sender
@@ -327,6 +338,14 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	defer rf.LogInstallSnapshotOut(rf.me, *args, *reply)
 
 	rf.persist(nil)
+
+	// If receiver receives a newer RPC with larger RPCID, then it should ignore RPC with smaller RPCID since it is outdated
+	if rf.newestInstallSnapshotRPCID[args.LeaderID] < args.RPCID {
+		rf.newestInstallSnapshotRPCID[args.LeaderID] = args.RPCID
+	} else {
+		reply.Ignore = true
+		return
+	}
 
 	if args.Term < rf.currentTerm { // my term is newer
 		reply.Term = rf.currentTerm // return my current term to update the sender

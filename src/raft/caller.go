@@ -162,6 +162,10 @@ func (rf *Raft) SendAppendEntries(server int, args AppendEntriesArgs, reply Appe
 		Printf("AppendEntries from LEADER %d to FOLLOWER %d [RPC %d] failed\n", rf.me, server, args.RPCID)
 		return
 	}
+	if reply.Ignore {
+		Printf("AppendEntries from LEADER %d to FOLLOWER %d [RPC %d] ignored due to being outdated\n", rf.me, server, args.RPCID)
+		return
+	}
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -503,6 +507,10 @@ func (rf *Raft) SendInstallSnapshot(server int, args InstallSnapshotArgs, reply 
 
 	if !success { // RPC failed
 		Printf("InstallSnapshot from LEADER %d to FOLLOWER %d [RPC %d] failed\n", rf.me, server, args.RPCID)
+		return
+	}
+	if reply.Ignore {
+		Printf("InstallSnapshot from LEADER %d to FOLLOWER %d [RPC %d] ignored due to being outdated\n", rf.me, server, args.RPCID)
 		return
 	}
 
