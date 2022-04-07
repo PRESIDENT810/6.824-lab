@@ -14,7 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - shell: bash
-    - working-directory: src/raft
+
     - name: TestRaft
-      run: bash ./go-test-many.sh 1000 4 2 -race
+      run: ./go-test-many.sh 1000 4 2 -race
+      shell: bash
+      working-directory: src/raft
