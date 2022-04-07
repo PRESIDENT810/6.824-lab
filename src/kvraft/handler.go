@@ -35,7 +35,6 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 		reply.Err = ErrWrongLeader
 		return
 	}
-	//kv.rf.RequestReplication(term)
 
 	// By comparing the commandID of the command we sent and the command actually applied,
 	// we can determine whether our command is successfully broadcast to all raft peers
@@ -92,12 +91,11 @@ func (kv *KVServer) Put(args *PutArgs, reply *PutReply) {
 	channel := make(chan bool)
 
 	// Not sure where term should be used
-	index, term, isLeader := kv.rf.Start(cmd)
+	index, _, isLeader := kv.rf.Start(cmd)
 	if !isLeader {
 		reply.Err = ErrWrongLeader
 		return
 	}
-	kv.rf.RequestReplication(term)
 
 	// By comparing the commandID of the command we sent and the command actually applied,
 	// we can determine whether our command is successfully broadcast to all raft peers
@@ -153,14 +151,11 @@ func (kv *KVServer) Append(args *AppendArgs, reply *AppendReply) {
 	channel := make(chan bool)
 
 	// Not sure where term should be used
-	index, term, isLeader := kv.rf.Start(cmd)
+	index, _, isLeader := kv.rf.Start(cmd)
 	if !isLeader {
 		reply.Err = ErrWrongLeader
 		return
 	}
-	// TODO: manually invoke kv.rf.RequestReplication, this is because if we call RequestReplication in Start(),
-	// we cannot pass TestCount2B, so we have to call it here to avoid failing that test
-	kv.rf.RequestReplication(term)
 
 	// By comparing the commandID of the command we sent and the command actually applied,
 	// we can determine whether our command is successfully broadcast to all raft peers

@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -12,6 +13,7 @@ import (
 // which is to send log through applyCh, and also increase raft instance's lastApplied value
 //
 func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
+	// TODO: must be too many competitor for rf.mu, because log shows that applier and committer works fine, just slow
 	for !rf.killed() {
 		time.Sleep(10 * time.Millisecond)
 		rf.mu.Lock()
@@ -41,6 +43,7 @@ func (rf *Raft) SetApplier(applyCh chan ApplyMsg) {
 					rf.lastApplied = rf.lastIncludedIndex
 				} else {
 					command := rf.logs[lastActualApplied].Command
+					fmt.Printf("I'm [raft%d] and my log entry %d applied\n", rf.me, rf.lastApplied)
 					applyMsg = ApplyMsg{true, command, rf.lastApplied, false, nil, 0, 0}
 				}
 				rf.mu.Unlock()
