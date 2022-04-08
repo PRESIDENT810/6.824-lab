@@ -16,6 +16,6 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: TestRaft
-      run: ./go-test-many.sh 150 4 2 -race
+      run: ./go-test-many.sh 100 4 2 -race
       shell: bash
       working-directory: src/raft

@@ -131,7 +131,6 @@ func (rf *Raft) PrepareAppendEntries(term int, server int, heartbeat bool) {
 	}
 
 	id := atomic.AddInt64(&serialNumber, 1) // get the RPC's serial number
-	rf.newestAppendEntriesRPCID[server] = id
 	args := AppendEntriesArgs{
 		term,
 		leaderId,

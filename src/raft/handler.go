@@ -1,5 +1,7 @@
 package raft
 
+import "sync/atomic"
+
 // RequestVoteArgs
 //
 // RequestVote RPC arguments structure.
@@ -91,20 +93,20 @@ type InstallSnapshotReply struct {
 // AppendEntries RPC handler
 //
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	// If receiver receives a newer RPC with larger RPCID, then it should ignore RPC with smaller RPCID since it is outdated
+	newestAppendEntriesRPCID := atomic.LoadInt64(&rf.newestAppendEntriesRPCID[args.LeaderId])
+	if newestAppendEntriesRPCID < args.RPCID {
+		atomic.StoreInt64(&rf.newestAppendEntriesRPCID[args.LeaderId], args.RPCID)
+	} else {
+		reply.Ignore = true
+		return
+	}
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
 	rf.LogAppendEntriesIn(*args, *reply)
 	defer rf.LogAppendEntriesOut(rf.me, *args, *reply)
-
-	// If receiver receives a newer RPC with larger RPCID, then it should ignore RPC with smaller RPCID since it is outdated
-	if rf.newestAppendEntriesRPCID[args.LeaderId] < args.RPCID {
-		rf.newestAppendEntriesRPCID[args.LeaderId] = args.RPCID
-	} else {
-		reply.Ignore = true
-		return
-	}
 
 	if args.Term < rf.currentTerm { // my term is newer
 		reply.Term = rf.currentTerm // return my current term to update the sender

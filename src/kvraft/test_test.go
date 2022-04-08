@@ -1,6 +1,9 @@
 package kvraft
 
-import "mit-6.824/porcupine"
+import (
+	"mit-6.824/porcupine"
+	"runtime"
+)
 import "mit-6.824/models"
 import "testing"
 import "strconv"
@@ -398,7 +401,8 @@ func GenericTestSpeed(t *testing.T, part string, maxraftstate int) {
 
 	start := time.Now()
 	for i := 0; i < numOps; i++ {
-		fmt.Println(i)
+		cnt := runtime.NumGoroutine()
+		fmt.Printf("i=%d, Current goroutine count: %d\n", i, cnt)
 		ck.Append("x", "x 0 "+strconv.Itoa(i)+" y")
 	}
 	dur := time.Since(start)
