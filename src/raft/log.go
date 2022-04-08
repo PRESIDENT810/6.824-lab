@@ -29,11 +29,11 @@ type LogConfig struct {
 }
 
 var logConfig = LogConfig{
-	false,
 	true,
 	false,
 	false,
-	true,
+	false,
+	false,
 	false,
 	false,
 	false,

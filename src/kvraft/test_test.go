@@ -384,7 +384,7 @@ func GenericTest(t *testing.T, part string, nclients int, nservers int, unreliab
 // Check that ops are committed fast enough, better than 1 per heartbeat interval
 func GenericTestSpeed(t *testing.T, part string, maxraftstate int) {
 	const nservers = 3
-	const numOps = 1000
+	const numOps = 2000
 	cfg := make_config(t, nservers, false, maxraftstate)
 	defer cfg.cleanup()
 

@@ -98,8 +98,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	rf.LogAppendEntriesIn(*args, *reply)
 	defer rf.LogAppendEntriesOut(rf.me, *args, *reply)
 
-	rf.persist(nil)
-
 	// If receiver receives a newer RPC with larger RPCID, then it should ignore RPC with smaller RPCID since it is outdated
 	if rf.newestAppendEntriesRPCID[args.LeaderId] < args.RPCID {
 		rf.newestAppendEntriesRPCID[args.LeaderId] = args.RPCID
@@ -111,7 +109,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 	if args.Term < rf.currentTerm { // my term is newer
 		reply.Term = rf.currentTerm // return my current term to update the sender
 		reply.Success = false       // reply false if term < currentTerm
-		rf.persist(nil)             // currentTerm is changed, so I need to save my states
 		return
 	}
 
@@ -126,7 +123,6 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	if rf.role == CANDIDATE { // we have same term, but I'm a candidate (impossible for two leaders at same term)
 		rf.role = FOLLOWER // convert myself to a follower, since this term we have a leader
-		rf.persist(nil)
 	}
 
 	prevLogIndex := args.PrevLogIndex // use a local variable to store prevLogIndex for efficiency
@@ -256,8 +252,6 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	rf.LogRequestVoteIn(rf.me, *args, *reply)
 	defer rf.LogRequestVoteOut(rf.me, *args, *reply)
 
-	rf.persist(nil)
-
 	upToDate := true // is your log more up-to-date?
 	myLastLogActualIndex := len(rf.logs) - 1
 	// log         : 0 1 2 3 4 5 6 7 8
@@ -297,9 +291,9 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.Term = rf.currentTerm
 		reply.VoteGranted = true
 		if rf.voteFor != args.CandidateId {
-			rf.persist(nil) // voteFor are changed, so I need to save my states
+			rf.voteFor = args.CandidateId // change my voteFor to the candidate
+			rf.persist(nil)               // voteFor are changed, so I need to save my states
 		}
-		rf.voteFor = args.CandidateId // change my voteFor to the candidate
 		rf.resetElectionTimer()
 		return
 	}
@@ -337,8 +331,6 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 	rf.LogInstallSnapshotIn(rf.me, *args, *reply)
 	defer rf.LogInstallSnapshotOut(rf.me, *args, *reply)
 
-	rf.persist(nil)
-
 	// If receiver receives a newer RPC with larger RPCID, then it should ignore RPC with smaller RPCID since it is outdated
 	if rf.newestInstallSnapshotRPCID[args.LeaderID] < args.RPCID {
 		rf.newestInstallSnapshotRPCID[args.LeaderID] = args.RPCID
@@ -349,7 +341,6 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
 	if args.Term < rf.currentTerm { // my term is newer
 		reply.Term = rf.currentTerm // return my current term to update the sender
-		rf.persist(nil)             // currentTerm is changed, so I need to save my states
 		return
 	}
 
@@ -364,7 +355,6 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
 	if rf.role == CANDIDATE { // we have same term, but I'm a candidate (impossible for two leaders at same term)
 		rf.role = FOLLOWER // convert myself to a follower, since this term we have a leader
-		rf.persist(nil)
 	}
 
 	reply.Term = rf.currentTerm
