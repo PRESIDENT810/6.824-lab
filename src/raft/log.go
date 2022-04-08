@@ -29,21 +29,21 @@ type LogConfig struct {
 }
 
 var logConfig = LogConfig{
-	true,
-	true,
 	false,
 	true,
-	true,
+	false,
 	false,
 	true,
+	false,
+	false,
 	false,
 	false,
 	false,
 }
 
 func init() {
-	DEBUG := os.Getenv("DEBUG")
-	if DEBUG != "ON" {
+	DebugRaft := os.Getenv("DEBUG_RAFT")
+	if DebugRaft != "ON" {
 		logConfig = LogConfig{
 			false,
 			false,
@@ -56,7 +56,6 @@ func init() {
 			false,
 			false,
 		}
-
 	}
 }
 

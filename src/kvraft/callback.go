@@ -30,6 +30,7 @@ func (controller *CallbackController) RegisterCallback(index int, callback func(
 	controller.LogCallbackMutexLock()
 	defer controller.LogCallbackMutexUnlock()
 	defer controller.mu.Unlock()
+	controller.LogRegisterCallback(index)
 	if _, ok := controller.CallbackMap[index]; ok {
 		controller.CallbackMap[index] = append(controller.CallbackMap[index], callback)
 		return
@@ -58,6 +59,7 @@ func (kv *KVServer) ApplierReceiver(applyCh chan raft.ApplyMsg) {
 			// could be discarded (see figure 8); however, there can't be an applied command with no callback,
 			// because a command must be submitted with a callback registered in previous
 			for _, callback := range kv.controller.CallbackMap[commandIndex] {
+				kv.controller.LogConsumeCallback(commandIndex)
 				go callback(command.CommandID)
 			}
 			delete(kv.controller.CallbackMap, commandIndex)

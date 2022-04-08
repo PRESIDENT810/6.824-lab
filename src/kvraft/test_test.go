@@ -398,6 +398,7 @@ func GenericTestSpeed(t *testing.T, part string, maxraftstate int) {
 
 	start := time.Now()
 	for i := 0; i < numOps; i++ {
+		fmt.Println(i)
 		ck.Append("x", "x 0 "+strconv.Itoa(i)+" y")
 	}
 	dur := time.Since(start)
