@@ -85,11 +85,12 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.rf = raft.Make(servers, me, persister, kv.applyCh)
+	kv.rf.StartNoop = func() {
+		go kv.rf.Start(Command{NOOP, "", "", -1})
+	}
 
 	// You may need initialization code here.
 	go kv.ApplierReceiver(kv.applyCh)
-
-	// TODO: handle exactly-once!
 
 	return kv
 }

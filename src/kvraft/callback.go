@@ -47,12 +47,15 @@ func (controller *CallbackController) RegisterCallback(index int, callback func(
 func (kv *KVServer) ApplierReceiver(applyCh chan raft.ApplyMsg) {
 	// Handle received applied message
 	for applyMsg := range applyCh {
-		kv.controller.mu.Lock()
-		kv.controller.LogCallbackMutexLock()
-
 		commandValid := applyMsg.CommandValid
 		command := applyMsg.Command.(Command)
 		commandIndex := applyMsg.CommandIndex
+		if command.CommandType == NOOP {
+			continue
+		}
+
+		kv.controller.mu.Lock()
+		kv.controller.LogCallbackMutexLock()
 
 		if commandValid { // Normal command
 			// An applied command could have multiple callback for that index, because a submitted log entry

@@ -4,6 +4,7 @@ const (
 	GET    = 1
 	PUT    = 2
 	APPEND = 3
+	NOOP   = 4
 )
 
 type Command struct {
@@ -72,7 +73,6 @@ func (kv *KVServer) Get(args *GetArgs, reply *GetReply) {
 		reply.Err = ErrWrongLeader
 		return
 	}
-
 }
 
 // Put
