@@ -321,6 +321,9 @@ func (rf *Raft) SendRequestVote(server int, args RequestVoteArgs, reply RequestV
 				}
 				go rf.SetCommitter()    // set a committer to periodically check if the commitIndex can be incremented
 				go rf.heartbeatTicker() // set a ticker as leader for periodically sending heartbeat
+				if rf.StartNoop != nil {
+					go rf.StartNoop()
+				}
 			}
 		} else { // this server agree to vote for me
 			rf.downVote++

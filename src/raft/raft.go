@@ -114,6 +114,9 @@ type Raft struct {
 
 	// for output log
 	verbose bool
+
+	// for start a no-op when this raft instance becomes the leader
+	StartNoop func()
 }
 
 // GetState
@@ -247,6 +250,7 @@ func Make(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh chan 
 	rf.newestInstallSnapshotRPCID = make([]int64, len(peers))
 
 	rf.verbose = true
+	rf.StartNoop = nil
 
 	go rf.electionTicker()    // set a timer to calculate elapsed time for election
 	go rf.SetApplier(applyCh) // set an applier to apply logs (send through applyCh)
